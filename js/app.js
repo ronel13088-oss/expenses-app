@@ -69,7 +69,8 @@ function insightsView() {
   const u = $('#unhide'); if (u) u.onclick = async () => { S.hiddenInsights = {}; await save(); render(); };
   $('#copysum').onclick = () => { const A = C.analyze(S.txs, { ...opts(), monthMode: 'txn' });
     modal(`<h2>ייצוא ל-AI</h2><p style="font-size:13px;color:var(--muted)">זה בדיוק מה שיועתק. אפשר לערוך לפני ההעתקה. שום דבר לא נשלח מהאפליקציה.</p><label><input type="checkbox" id="wm"> לכלול שמות בתי עסק (חושף יותר מידע)</label><textarea id="sumtxt" rows="14" style="width:100%;font:13px Heebo,sans-serif"></textarea><button id="docopy" class="copy">העתק</button>`);
-    const ta = $('#sumtxt'), fill = () => { ta.value = C.summaryText(A, { merchants: $('#wm').checked }); }; fill(); $('#wm').onchange = fill;
+    const ta = $('#sumtxt'), gen = () => C.summaryText(A, { merchants: $('#wm').checked }); let last; const fill = () => { last = ta.value = gen(); }; fill();
+    $('#wm').onchange = () => { if (ta.value !== last && !confirm('השינויים שערכת בטקסט יימחקו. להמשיך?')) { $('#wm').checked = !$('#wm').checked; return; } fill(); };
     $('#docopy').onclick = async () => { try { await navigator.clipboard.writeText(ta.value); alert('הועתק'); } catch { ta.select(); document.execCommand('copy'); alert('הועתק'); } }; };
 }
 function savingsModal() {

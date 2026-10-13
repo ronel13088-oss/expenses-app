@@ -39,3 +39,8 @@ test('export: prompt line on top, merchants only when opted in', () => {
   const A = C.analyze(data(), { ...opt, monthMode: 'txn' }); const t = C.summaryText(A);
   assert.ok(t.startsWith(C.AI_PROMPT)); assert.ok(!/Netflix|סופר שופ/.test(t)); assert.match(C.summaryText(A, { merchants: true }), /סופר שופ/);
 });
+test('export merchants exclude transfers to people', () => {
+  const d = [...data(), { id: 'p1', date: '2026-02-12', merchant: 'העברה לפלוני 12-345-678', amount: 300, kind: 'checking' }];
+  const A = C.analyze(d, { ...opt, monthMode: 'txn', overrides: { ...opt.overrides, 'העברה לפלוני 12-345-678': C.TRANSFERS } });
+  assert.ok(!/פלוני/.test(C.summaryText(A, { merchants: true })));
+});

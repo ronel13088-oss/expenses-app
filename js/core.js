@@ -354,7 +354,7 @@ export const AI_PROMPT = 'נתח את ההוצאות וההכנסות שלי ל�
 export function summaryText(A, { merchants = false } = {}) {
   const full = A.byMonth.filter(m => !m.partial).map(m => m.month), cats = A.byCategory.map(c => c.key);
   const rows = cats.map(c => `${c}: ${full.map(m => `${m} ₪${fmt(A.txs.filter(t => t.month === m && t.category === c).reduce((s, t) => s + t.amount, 0))}`).join(', ')}`);
-  const top = merchants ? `\n\nבתי עסק מובילים (כל התקופה):\n${A.byMerchant.slice(0, 10).map(m => `${m.key}: ₪${fmt(m.total)}`).join('\n')}` : '';
+  const top = merchants ? `\n\nבתי עסק מובילים (כל התקופה):\n${A.byMerchant.filter(m => !A.txs.some(t => normMerchant(t.merchant) === m.norm && (t.category === TRANSFERS || t.category === HOUSING || t.kind === 'checking' && !t.company))).slice(0, 10).map(m => `${m.key}: ₪${fmt(m.total)}`).join('\n')}` : '';
   return `${AI_PROMPT}\n\nסיכום הוצאות לפי קטגוריה וחודש (חודשים מלאים בלבד):\n${A.byMonth.filter(m => !m.partial).map(m => `${m.month}: הוצאות ₪${fmt(m.expenses)}, הכנסות ₪${fmt(m.income)}`).join('\n')}\n\n${rows.join('\n')}${top}`;
 }
 
