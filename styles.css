@@ -36,3 +36,4 @@ table { width:100%; border-collapse:collapse; font-size:13px; } td, th { padding
 .chips { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px; } .chip { background:var(--track); border-radius:12px; padding:2px 10px; font-size:12px; }
 .empty { text-align:center; padding:60px 24px; color:var(--muted); }
 svg text { font-family: Heebo, sans-serif; }
+.upd { position:sticky; top:0; z-index:5; text-align:center; }

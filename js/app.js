@@ -133,5 +133,13 @@ $('#fab').onclick = () => $('#file').click();
 $('#file').onchange = async e => { for (const f of e.target.files) await importFile(f); e.target.value = ''; S.month = null; S.tab = 'home'; render(); };
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; render(); window.scrollTo(0, 0); });
 if (/iphone|ipad|ipod/i.test(navigator.userAgent) && !navigator.standalone) $('#ios-note').hidden = false;
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+if ('serviceWorker' in navigator) {
+  const banner = w => { if ($('#upd')) return; const b = document.createElement('div'); b.id = 'upd'; b.className = 'note upd'; b.innerHTML = 'גרסה חדשה זמינה — <button class="link">רענן</button>';
+    b.querySelector('button').onclick = () => w.postMessage('skipWaiting'); document.body.prepend(b); };
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    if (reg.waiting && navigator.serviceWorker.controller) banner(reg.waiting);
+    reg.addEventListener('updatefound', () => { const w = reg.installing; w.addEventListener('statechange', () => { if (w.state === 'installed' && navigator.serviceWorker.controller) banner(w); }); });
+    setInterval(() => reg.update(), 60 * 60 * 1000); });
+  let reloaded = false; navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
+}
 await load(); DB.persist(); render();

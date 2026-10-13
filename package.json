@@ -1,2 +1,13 @@
-{ "name": "expenses-pwa", "private": true, "type": "module",
-  "scripts": { "test": "node --test tests/", "check": "node scripts/check-no-real-data.mjs", "serve": "python3 -m http.server 8080" } }
+{
+  "name": "expenses-pwa",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/",
+    "check": "node scripts/check-no-real-data.mjs",
+    "serve": "python3 -m http.server 8080",
+    "setup": "git config core.hooksPath .githooks && chmod +x .githooks/pre-commit",
+    "prepare": "git config core.hooksPath .githooks || true",
+    "version:sw": "node scripts/build-version.mjs"
+  }
+}

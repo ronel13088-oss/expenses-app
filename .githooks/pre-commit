@@ -1,3 +1,6 @@
 #!/bin/sh
-node scripts/check-no-real-data.mjs || exit 1
+set -e
+node scripts/check-no-real-data.mjs
 node --test tests/ >/dev/null || { echo "tests failed"; exit 1; }
+node scripts/build-version.mjs
+git add sw.js
