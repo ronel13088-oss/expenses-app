@@ -111,66 +111,128 @@ export function mergeTransactions(existing, incoming) {
 }
 export const monthOf = (t, mode = 'charge') => (mode === 'charge' ? t.chargeDate || t.date : t.date).slice(0, 7);
 
-// Dedupe: checking-account card settlement lines are excluded when card-level data for that company exists
-// and the amount ≈ that company's card charges for the same charge month (tolerance 3% or ₪5). srctype is only a hint.
+// Dedupe: checking-account card settlement lines vs card-level data (tolerance 3% or ₪5).
+// Per company+month: if the checking lines (single or combined) match the card total they are excluded.
+// Otherwise the card total is consumed and only the uncovered remainder is counted (t.residual),
+// so partial card files never make spending disappear. No card data for that month -> line counted in full.
 export function markSettlements(txs, { tol = 0.03 } = {}) {
-  const sums = {}; const companiesWithData = new Set();
-  for (const t of txs) if (t.kind === 'card' && t.company) { companiesWithData.add(t.company); const m = monthOf(t, 'charge');
+  const sums = {};
+  for (const t of txs) if (t.kind === 'card' && t.company) { const m = monthOf(t, 'charge');
     for (const k of [t.company + '|' + m, t.company + '|' + m + '|' + t.card]) sums[k] = (sums[k] || 0) + t.amount; }
+  const groups = {};
   for (const t of txs) {
-    t.settlement = null; t.excluded = false;
-    if (t.kind !== 'checking') continue; const co = cardCompanyOf(t.merchant); if (!co) continue;
-    const m = t.date.slice(0, 7); const close = s => Math.abs(s - t.amount) <= Math.max(5, Math.abs(t.amount) * tol);
-    const cands = Object.entries(sums).filter(([k]) => k.startsWith(co + '|' + m)); // company total + each card's total
-    const hit = cands.find(([, v]) => close(v)); const s = hit ? hit[1] : sums[co + '|' + m];
-    const match = !!hit;
-    t.settlement = { company: co, matched: match, cardSum: s ?? null };
-    // exclude if matched, or if we have card data for this company at all (partial card coverage) -> still exclude, flagged unmatched
-    t.excluded = match || companiesWithData.has(co);
+    t.settlement = null; t.excluded = false; delete t.residual;
+    if (t.kind !== 'checking') continue; const co = cardCompanyOf(t.merchant); if (!co || t.amount <= 0) continue;
+    (groups[co + '|' + t.date.slice(0, 7)] ||= []).push(t);
+  }
+  for (const [key, lines] of Object.entries(groups)) {
+    const [co] = key.split('|'); const close = (s, a) => Math.abs(s - a) <= Math.max(5, Math.abs(a) * tol);
+    const total = sums[key]; const cands = Object.entries(sums).filter(([k]) => k === key || k.startsWith(key + '|')).map(([, v]) => v);
+    const gsum = lines.reduce((s, t) => s + t.amount, 0);
+    if (total === undefined) { for (const t of lines) t.settlement = { company: co, matched: false, cardSum: null }; continue; }
+    if (cands.some(v => close(v, gsum))) { for (const t of lines) { t.settlement = { company: co, matched: true, cardSum: r2(total) }; t.excluded = true; } continue; }
+    let rem = total;
+    for (const t of [...lines].sort((x, y) => x.amount - y.amount)) {
+      const hit = cands.find(v => close(v, t.amount));
+      if (hit !== undefined) { t.settlement = { company: co, matched: true, cardSum: r2(hit) }; t.excluded = true; rem -= hit; continue; }
+      t.settlement = { company: co, matched: false, cardSum: r2(total) };
+      if (rem > 0 && close(rem, t.amount)) { t.excluded = true; rem = 0; }
+      else { const cov = Math.max(0, Math.min(rem, t.amount)); rem -= cov; if (cov > 0) t.residual = r2(t.amount - cov); }
+    }
   }
   return txs;
 }
 
+export const TRANSFERS = 'העברות ומזומן', OWN = 'העברות בין חשבונות', INCOME = 'הכנסות', REFUNDS = 'זיכויים והחזרים';
 export const DEFAULT_RULES = [
   ['מזון וסופר', 'שופרסל,רמי לוי,ויקטורי,יוחננוף,מגה,טיב טעם,אושר עד,am:pm,ampm,סופר,מכולת,חצי חינם,carrefour,קרפור'],
-  ['מסעדות ומשלוחים', 'wolt,וולט,תן ביס,10bis,מסעד,קפה,cafe,פיצה,בורגר,מקדונלד,ארומה,גרג,סושי,japanika,פלאפל,שווארמה'],
-  ['תחבורה ודלק', 'פז,דלק,סונול,דור אלון,ten,yellow,רב קו,רב-קו,gett,מוניות,pango,פנגו,סלופארק,חניון,רכבת,אגד,דן ,כביש 6'],
-  ['מנויים ודיגיטל', 'netflix,spotify,apple.com,google,youtube,disney,amazon prime,openai,chatgpt,microsoft,adobe,icloud,yes,hot,partner,פרטנר,סלקום,cellcom,פלאפון,גולן'],
-  ['חשבונות הבית', 'חשמל,מי אביבים,מים,ארנונה,עירית,עיריית,בזק,גז,ועד בית'],
-  ['ביטוח ובריאות', 'ביטוח,הראל,מגדל,הפניקס,כלל,מנורה,מכבי,כללית,מאוחדת,לאומית,סופר-פארם,סופר פארם,בית מרקחת,be '],
-  ['ביגוד וקניות', 'זארה,zara,h&m,קסטרו,fox,פוקס,terminal x,aliexpress,amazon,shein,איקאה,ikea,ace,הום סנטר'],
-  ['תיירות ונופש', 'agoda,booking,airbnb,אל על,elal,wizz,ryanair,expedia,מלון,hotel'],
-  ['עמלות בנק', 'עמלה,ע.מפעולות,דמי ניהול חשבון,דמי כרטיס'],
+  ['מסעדות ומשלוחים', 'wolt,וולט,תן ביס,10bis,מסעדה,מסעדת,קפה,cafe,פיצה,פיצריה,בורגר,מקדונלד,מקדונלדס,ארומה,גרג,סושי,japanika,פלאפל,שווארמה'],
+  ['תחבורה ודלק', 'פז,דלק,סונול,דור אלון,yellow,רב קו,רב-קו,gett,מוניות,pango,פנגו,סלופארק,חניון,רכבת,אגד,כביש 6'],
+  ['מנויים ודיגיטל', 'netflix,spotify,apple.com,google,youtube,disney,amazon prime,openai,chatgpt,microsoft,adobe,icloud,yes,partner,פרטנר,סלקום,cellcom,פלאפון,גולן טלקום'],
+  ['חשבונות הבית', 'חשמל,מי אביבים,ארנונה,עירית,עיריית,בזק,ועד בית'],
+  ['ביטוח ובריאות', 'ביטוח,ביטוחי,בטוח,הראל,מגדל,הפניקס,כלל ביטוח,מנורה,מכבי,כללית,מאוחדת,לאומית,סופר-פארם,סופר פארם,בית מרקחת'],
+  ['ביגוד וקניות', 'זארה,zara,h&m,קסטרו,terminal x,aliexpress,amazon,shein,איקאה,ikea,הום סנטר'],
+  ['תיירות ונופש', 'agoda,booking,airbnb,אל על,elal,wizz,ryanair,expedia,trip.com,מלון,hotel'],
+  ['עמלות בנק', 'עמלה,עמלות,ע.מפעולות,דמי ניהול חשבון,דמי כרטיס'],
   ['השקעות', 'ני"ע,ניע,מטח-קניה,מט"ח'],
-  ['העברות ומזומן', 'bit,ביט,paybox,פייבוקס,העב,משיכה מבנקט,כספומט,שיק'],
+  [OWN, 'זיכוי מלאומי,העברה לחשבון שלי,העברה מחשבון שלי,העברה עצמית'],
+  [TRANSFERS, 'bit,ביט,paybox,פייבוקס,העב,העברה,העברת,משיכה מבנקט,כספומט,שיק'],
 ];
+// RiseUp (and other source) category names -> ours. null = source catch-all, treat as uncategorized.
+export const SOURCE_CATEGORY_MAP = {
+  'אוכל בחוץ': 'מסעדות ומשלוחים', 'סופר': 'מזון וסופר', 'תיירות': 'תיירות ונופש', 'רכב': 'תחבורה ודלק', 'תחבורה ציבורית': 'תחבורה ודלק',
+  'פארמה': 'ביטוח ובריאות', 'ביטוח': 'ביטוח ובריאות', 'בריאות': 'ביטוח ובריאות', 'תקשורת': 'מנויים ודיגיטל', 'דיגיטל': 'מנויים ודיגיטל',
+  'מים': 'חשבונות הבית', 'חשמל': 'חשבונות הבית', 'עמלות': 'עמלות בנק', 'שיק': TRANSFERS, 'מזומן': TRANSFERS, 'העברות': TRANSFERS,
+  'חסכון חד פעמי': 'חיסכון', 'חסכון': 'חיסכון', 'הכנסות קבועות': INCOME, 'הכנסות משתנות': INCOME,
+  'הוצאות משתנות': null, 'כללי': null, 'תשלומים': null,
+};
+export const mapSourceCategory = c => { if (!c) return null; const k = String(c).trim(); return k in SOURCE_CATEGORY_MAP ? SOURCE_CATEGORY_MAP[k] : k; };
+// Keywords shorter than 2 chars are ignored; matching is on word boundaries. Hebrew keywords may take one
+// prefix letter (ב,ה,ו,ל,מ,ש,כ) e.g. "בני"ע", but no trailing letters (so "כללית" never hits "מכללת").
+const esc = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); const reCache = new Map();
+export function keywordRe(kw) {
+  const k = normMerchant(kw); if (reCache.has(k)) return reCache.get(k);
+  const heb = /^[\u0590-\u05FF]/.test(k);
+  const re = k.length < 2 ? null : new RegExp(`(?:^|[^\\p{L}\\p{N}])${heb ? '[בהולמשכ]?' : ''}${esc(k)}(?![\\p{L}\\p{N}])`, 'u');
+  reCache.set(k, re); return re;
+}
+export const keywordHit = (merchant, kw) => { const re = keywordRe(kw); return !!re && re.test(normMerchant(merchant)); };
 export function rulesFromDefaults() { const r = []; for (const [cat, kws] of DEFAULT_RULES) for (const k of kws.split(',')) r.push({ category: cat, keyword: k.trim() }); return r; }
+const REFUND_RE = /החזר|זיכוי|ביטול|refund/i; const NEUTRAL = new Set(['השקעות', OWN, 'חיסכון']); // never income, never expense (toggle)
+// Order: user override -> keyword rules -> mapped source category -> sign fallback.
+// Money in (amount<0): neutral categories (investments, transfers) stay; card credits / refund wording -> refund
+// (negative expense in its category); other checking inflows -> income.
 export function categorize(t, rules, overrides = {}, opts = {}) {
   const nm = normMerchant(t.merchant);
   if (overrides[nm]) return overrides[nm];
-  if (t.amount < 0 && t.kind === 'checking' && !/החזר|זיכוי מ/.test(t.merchant)) return 'הכנסות';
-  if (opts.preferSource && t.srcCategory) return t.srcCategory;
-  const sorted = [...rules].sort((a, b) => b.keyword.length - a.keyword.length); // specific before short
-  for (const r of sorted) if (r.keyword && nm.includes(normMerchant(r.keyword))) return r.category;
-  return t.srcCategory || UNCAT;
+  const sorted = [...rules].sort((a, b) => b.keyword.length - a.keyword.length);
+  let cat = null; const src = mapSourceCategory(t.srcCategory);
+  if (opts.preferSource && src && src !== INCOME) cat = src;
+  if (!cat) for (const r of sorted) if (r.keyword && keywordHit(nm, r.keyword)) { cat = r.category; break; }
+  if (cat === 'עמלות בנק' && /החזר/.test(nm)) cat = REFUNDS;
+  if (!cat && src !== INCOME) cat = src;
+  if (t.amount < 0) {
+    if (cat && NEUTRAL.has(cat)) return cat;
+    if (cat === INCOME || cat === TRANSFERS) return INCOME;
+    if (t.kind === 'card' || REFUND_RE.test(nm)) return cat && cat !== INCOME ? cat : REFUNDS;
+    return INCOME;
+  }
+  return cat && cat !== INCOME ? cat : UNCAT;
 }
+const FX_HINT = /\b(agoda|aliexpress|trip\.com|booking|airbnb|expedia|amazon|ebay|temu|shein|paypal)\b|\s(?!il\b)[a-z]{2}$/i;
+export const isForeignLikely = t => !!t.currency || (t.kind === 'card' && FX_HINT.test(String(t.merchant).trim()));
 
-export function analyze(txs, { rules, overrides = {}, monthMode = 'charge', preferSource = false } = {}) {
+// excludeNeutral (default on): investments + own-account transfers are excluded from expenses and income and shown separately.
+// Other transfers/cheques/bit stay expenses; their payees are listed in reviewPayees for a one-time per-payee decision (saved as override).
+export function analyze(txs, { rules, overrides = {}, monthMode = 'charge', preferSource = false, excludeNeutral = true, span = null } = {}) {
   rules = rules || rulesFromDefaults();
-  const live = txs.filter(t => !t.excluded).map(t => ({ ...t, category: categorize(t, rules, overrides, { preferSource }), month: monthOf(t, monthMode) }));
-  const isInc = c => /^הכנסות/.test(c); const exp = live.filter(t => !isInc(t.category) && !/^(השקעות|חסכון|חיסכון)/.test(t.category));
+  const live = txs.filter(t => !t.excluded).map(t => ({ ...t, amount: t.residual ?? t.amount, category: categorize(t, rules, overrides, { preferSource }), month: monthOf(t, monthMode) }));
+  const isInc = c => c === INCOME || /^הכנסות/.test(c); const isNeutral = c => NEUTRAL.has(c) || /^(חסכון|חיסכון)/.test(c);
+  const neutral = live.filter(t => isNeutral(t.category));
+  const exp = live.filter(t => !isInc(t.category) && !(excludeNeutral && isNeutral(t.category)));
   const sumBy = (arr, key) => { const o = {}; for (const t of arr) o[key(t)] = (o[key(t)] || 0) + t.amount; return o; };
   const months = [...new Set(live.map(t => t.month))].sort();
-  const byMonth = months.map(m => ({ month: m, expenses: r2(exp.filter(t => t.month === m).reduce((s, t) => s + t.amount, 0)),
+  // coverage: a month is partial if the data's date span does not cover it (allow 3 days slack at each end)
+  const dates = (span || txs.map(t => t.date)).filter(Boolean).sort(); const lo = dates[0], hi = dates.at(-1);
+  const partial = m => { if (!lo) return false; const [y, mo] = m.split('-').map(Number); const dim = new Date(y, mo, 0).getDate();
+    const s = `${m}-04`, e = `${m}-${String(dim - 3).padStart(2, '0')}`; return lo > s || hi < e; };
+  const byMonth = months.map(m => ({ month: m, partial: partial(m), expenses: r2(exp.filter(t => t.month === m).reduce((s, t) => s + t.amount, 0)),
     income: r2(-live.filter(t => t.month === m && isInc(t.category)).reduce((s, t) => s + t.amount, 0)) }));
+  const full = byMonth.filter(m => !m.partial);
   const total = r2(exp.reduce((s, t) => s + t.amount, 0));
   const byCategory = Object.entries(sumBy(exp, t => t.category)).map(([k, v]) => ({ key: k, total: r2(v) })).sort((a, b) => b.total - a.total);
   const merchName = {}; exp.forEach(t => merchName[normMerchant(t.merchant)] ??= t.merchant.trim());
   const byMerchant = Object.entries(sumBy(exp, t => normMerchant(t.merchant))).map(([k, v]) => ({ key: merchName[k], norm: k, total: r2(v), count: exp.filter(t => normMerchant(t.merchant) === k).length })).sort((a, b) => b.total - a.total);
   const recurring = months.length >= 3 ? detectRecurring(exp) : null;
-  const res = { months, byMonth, total, monthlyAvg: months.length ? r2(total / months.length) : 0, byCategory, byMerchant, top10: byMerchant.slice(0, 10), recurring, txs: live,
-    excluded: txs.filter(t => t.excluded), refunds: r2(-exp.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0)),
-    foreign: exp.filter(t => t.currency).length, installments: exp.filter(t => t.instTot > 1).length };
+  const reviewPayees = byMerchant.filter(m => !overrides[m.norm] && exp.some(t => t.category === TRANSFERS && normMerchant(t.merchant) === m.norm))
+    .map(m => ({ ...m, fixed: !!recurring?.some(r => r.norm === m.norm) }));
+  const res = { months, byMonth, partialMonths: byMonth.filter(m => m.partial).map(m => m.month), total,
+    monthlyAvg: full.length ? r2(full.reduce((s, m) => s + m.expenses, 0) / full.length) : (months.length ? r2(total / months.length) : 0),
+    byCategory, byMerchant, top10: byMerchant.slice(0, 10), recurring, reviewPayees, txs: live,
+    neutral: { total: r2(neutral.reduce((s, t) => s + t.amount, 0)), count: neutral.length, excluded: excludeNeutral },
+    excluded: txs.filter(t => t.excluded), residuals: txs.filter(t => t.residual != null),
+    refunds: r2(-exp.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0)),
+    foreign: exp.filter(t => t.currency).length, foreignLikely: exp.filter(isForeignLikely).length, installments: exp.filter(t => t.instTot > 1).length };
   res.savings = suggestSavings(res);
   return res;
 }
