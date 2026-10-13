@@ -1,11 +1,15 @@
 #!/usr/bin/env node
 // Fails (exit 1) if any repo file looks like it contains real financial rows.
 // Real-data source: /workspace/finance (or $REAL_DATA_DIR). Never commit anything from there.
-import fs from 'node:fs'; import path from 'node:path'; import { execSync } from 'node:child_process';
+import fs from 'node:fs'; import path from 'node:path'; import { execSync, execFileSync } from 'node:child_process';
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const REAL = process.env.REAL_DATA_DIR || '/workspace/finance';
 const SKIP = /^(vendor|fonts|icons|node_modules|\.git)\//;
-let files; try { files = execSync('git ls-files -co --exclude-standard', { cwd: ROOT }).toString().split('\n').filter(Boolean); }
+// --staged (used by pre-commit): check the index content (what will be committed), not the working tree.
+const STAGED = process.argv.includes('--staged');
+const git = (args, opts = {}) => execFileSync('git', args, { cwd: ROOT, maxBuffer: 1 << 28, ...opts });
+let files; if (STAGED) files = git(['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR']).toString().split('\0').filter(Boolean);
+else try { files = execSync('git ls-files -co --exclude-standard', { cwd: ROOT }).toString().split('\n').filter(Boolean); }
 catch { files = []; const walk = d => fs.readdirSync(path.join(ROOT, d), { withFileTypes: true }).forEach(e => { const p = path.join(d, e.name); e.isDirectory() ? walk(p) : files.push(p); }); walk(''); }
 files = files.filter(f => !SKIP.test(f));
 const bad = [];
@@ -23,11 +27,11 @@ if (fs.existsSync(REAL)) for (const n of fs.readdirSync(REAL)) {
 } else console.warn(`note: ${REAL} not found – only file-name checks ran`);
 const realBytes = fs.existsSync(REAL) ? fs.readdirSync(REAL).map(n => fs.readFileSync(path.join(REAL, n))) : [];
 for (const f of files) {
-  const buf = fs.readFileSync(path.join(ROOT, f)); if (realBytes.some(b => b.equals(buf))) { bad.push(`${f}: identical to a real data file`); continue; }
+  const buf = STAGED ? git(['show', ':' + f]) : fs.readFileSync(path.join(ROOT, f)); if (realBytes.some(b => b.equals(buf))) { bad.push(`${f}: identical to a real data file`); continue; }
   const text = norm(buf.toString('utf8')); const lines = text.split('\n');
   const hits = [...merchants].filter(m => text.includes(m));
   if (hits.length >= 5) bad.push(`${f}: ${hits.length} real merchant names`);
   for (const [m, a] of pairs) if (lines.some(l => l.includes(m) && new RegExp(`(^|[^\\d.])-?${a.replace('.', '\\.')}(?![\\d])`).test(l))) { bad.push(`${f}: real row (merchant+amount)`); break; }
 }
 if (bad.length) { console.error('BLOCKED – possible real financial data:\n  ' + [...new Set(bad)].join('\n  ')); process.exit(1); }
-console.log(`ok: ${files.length} files checked, no real data found`);
+console.log(`ok: ${files.length} ${STAGED ? 'staged ' : ''}files checked, no real data found`);

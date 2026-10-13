@@ -121,7 +121,7 @@ export function markSettlements(txs, { tol = 0.03 } = {}) {
     for (const k of [t.company + '|' + m, t.company + '|' + m + '|' + t.card]) sums[k] = (sums[k] || 0) + t.amount; }
   const groups = {};
   for (const t of txs) {
-    t.settlement = null; t.excluded = false; delete t.residual;
+    t.settlement = null; t.excluded = false; delete t.residual; delete t.dupOf;
     if (t.kind !== 'checking') continue; const co = cardCompanyOf(t.merchant); if (!co || t.amount <= 0) continue;
     (groups[co + '|' + t.date.slice(0, 7)] ||= []).push(t);
   }
@@ -140,6 +140,20 @@ export function markSettlements(txs, { tol = 0.03 } = {}) {
       else { const cov = Math.max(0, Math.min(rem, t.amount)); rem -= cov; if (cov > 0) t.residual = r2(t.amount - cov); }
     }
   }
+  markCrossSourceDupes(txs);
+  return txs;
+}
+// Same checking-account bit/paybox line exported by two sources (e.g. RiseUp + bank) with different wording:
+// same amount, date within ±1 day, bit-like description, different file -> later file's copy is excluded.
+export const BIT_RE = /(^|[^a-z])(bit|paybox)([^a-z]|$)|ביט|פייבוקס/i;
+const dayNum = d => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5;
+export function markCrossSourceDupes(txs) {
+  const cand = txs.filter(t => !t.excluded && t.kind === 'checking' && BIT_RE.test(t.merchant));
+  const used = new Set();
+  for (let i = 0; i < cand.length; i++) { const a = cand[i]; if (used.has(a)) continue;
+    for (let j = i + 1; j < cand.length; j++) { const b = cand[j];
+      if (used.has(b) || !a.file || !b.file || a.file === b.file || a.amount !== b.amount || Math.abs(dayNum(a.date) - dayNum(b.date)) > 1) continue;
+      b.excluded = true; b.dupOf = a.id; used.add(a); used.add(b); break; } }
   return txs;
 }
 

@@ -52,3 +52,14 @@ test('partial months flagged and excluded from monthly average', () => {
   const a = C.analyze(t, { span: ['2026-04-16', '2026-07-13'] });
   assert.deepEqual(a.partialMonths, ['2026-04', '2026-07']); assert.equal(a.monthlyAvg, 1500);
 });
+
+
+test('bit transfer in two sources (±1 day, different wording) counted once', () => {
+  const mk = (date, merchant, amount, file) => ({ date, chargeDate: date, merchant, amount, kind: 'checking', file, id: file + date + amount });
+  const txs = [mk('2026-03-10', 'העברת כסף bit', -500, 'riseup.csv'), mk('2026-03-11', 'העברת bit כסף', -500, 'bank.csv'),
+    mk('2026-03-10', 'העברת כסף bit', -500, 'riseup.csv#2'.slice(0, 10)), // same file, second real transfer
+    mk('2026-03-20', 'העברת כסף bit', -80, 'riseup.csv'), mk('2026-03-25', 'העברת bit כסף', -80, 'bank.csv'), // >1 day apart
+    mk('2026-03-12', 'שופרסל', -500, 'bank.csv')];
+  C.markSettlements(txs);
+  assert.deepStrictEqual(txs.map(t => !!t.excluded), [false, true, false, false, false, false]);
+});

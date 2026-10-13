@@ -1,6 +1,6 @@
 #!/bin/sh
 set -e
-node scripts/check-no-real-data.mjs
+node scripts/check-no-real-data.mjs --staged
 node --test tests/ >/dev/null || { echo "tests failed"; exit 1; }
 node scripts/build-version.mjs
 git add sw.js
