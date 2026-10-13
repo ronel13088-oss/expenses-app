@@ -30,15 +30,15 @@ export function parseCSV(text) {
 }
 
 const H = {
-  date: /^(date|תאריך( עסקה| רכישה| הפעולה)?|transaction.?date)$/i,
-  chargeDate: /charge.?date|תאריך חיוב|מועד חיוב|תאריך ערך/i,
+  date: /^(date|תאריך( עסקה| רכישה| הפעולה| התשלום)?|transaction.?date)$/i,
+  chargeDate: /charge.?date|תאריך (ה)?חיוב|מועד חיוב|תאריך ערך/i,
   description: /^(merchant|description|תיאור|שם בית (ה)?עסק|בית עסק|פרטים|תיאור התנועה|הפעולה)$/i,
   amount: /^(amount|סכום( חיוב| החיוב)?|סכום בש"ח|סכום חיוב ₪?)$/i,
   origAmount: /^(orig|original.?amount|סכום (ה)?עסקה( המקורי)?|סכום מקורי)$/i,
-  currency: /^(currency|מטבע( מקור| עסקה)?)$/i,
+  currency: /^(currency|מטבע( מקור| עסקה| חיוב)?)$/i,
   debit: /^(debit|חובה|בחובה)$/i, credit: /^(credit|זכות|בזכות)$/i,
-  instNo: /^(inst_no|תשלום( מספר)?)$/i, instTot: /^(inst_tot|מתוך|מס(פר)? תשלומים)$/i,
-  srctype: /^srctype$/i, src: /^(src|source|חברה|מקור)$/i, card: /^(card|כרטיס|4 ספרות.*)$/i, category: /^(category|קטגוריה|ענף)$/i,
+  instNo: /^(inst_no|תשלום( מספר)?|מספר התשלום)$/i, instTot: /^(inst_tot|מתוך|מס(פר)? תשלומים( כולל)?)$/i,
+  srctype: /^(srctype|סוג מקור)$/i, src: /^(src|source|חברה|מקור|אמצעי התשלום)$/i, card: /^(card|כרטיס|4 ספרות.*|אמצעי זיהוי התשלום)$/i, category: /^(category|קטגוריה( בתזרים)?|ענף)$/i,
 };
 export const UNCAT = 'לא מסווג', CARD_UNDETAILED = 'חיובי כרטיס ללא פירוט', HOUSING = 'דיור ושכירות', PENDING = 'לבדיקה – bit נכנס';
 export const FIELDS = Object.keys(H);
@@ -93,7 +93,7 @@ export function rowsToTransactions(rows, det, opts = {}) {
     const src = String(g(r, 'src') ?? opts.source ?? '').toLowerCase();
     const kind = /credit/i.test(srctypeRaw) ? 'card' : /checking/i.test(srctypeRaw) ? 'checking' : (SRC_ALIASES[src] ? 'card' : (opts.kind || 'checking'));
     const tx = { date, chargeDate: parseDate(g(r, 'chargeDate')) || date, merchant, amount: Math.round(amount * 100) / 100,
-      kind, company: kind === 'card' ? (SRC_ALIASES[src] || opts.company || null) : null, card: String(g(r, 'card') ?? ''),
+      kind, company: kind === 'card' ? (SRC_ALIASES[src] || opts.company || null) : null, card: (c => /^[\d-]{6,}$/.test(c) ? c.replace(/\D/g, '').slice(-4) : c)(String(g(r, 'card') ?? '').trim()),
       instNo: parseInt(g(r, 'instNo')) || null, instTot: parseInt(g(r, 'instTot')) || null,
       currency: String(g(r, 'currency') ?? '').trim() || null, origAmount: map.origAmount !== undefined ? Math.abs(parseNum(g(r, 'origAmount'))) || null : null,
       srcCategory: String(g(r, 'category') ?? '').trim() || null, file: opts.fileName || '' };
