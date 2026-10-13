@@ -1,4 +1,4 @@
-const V = 'exp-d181e247657c'; // auto-set by scripts/build-version.mjs (pre-commit)
+const V = 'exp-4adabdde720b'; // auto-set by scripts/build-version.mjs (pre-commit)
 const ASSETS = ['./', 'index.html', 'styles.css', 'manifest.webmanifest', 'js/app.js', 'js/core.js', 'js/db.js', 'js/backup.js', 'js/importers.js', 'vendor/xlsx.full.min.js', 'fonts/Heebo-VariableFont_wght.ttf', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', 'icons/icon-180.png', 'icons/icon-32.png'];
 self.addEventListener('install', e => e.waitUntil(caches.open(V).then(c => c.addAll(ASSETS)))); // waits until user taps refresh
 self.addEventListener('message', e => { if (e.data === 'skipWaiting') self.skipWaiting(); });
