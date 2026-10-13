@@ -35,3 +35,7 @@ test('savings category is neutral (not expense)', () => {
   const A = C.analyze([t], { overrides: { 'id:a|b|5000': C.SAVINGS } }); assert.equal(A.total, 0); assert.equal(A.neutral.count, 1);
 });
 test('savings offered in picker before any use', () => { assert.ok(C.pickerCats(C.rulesFromDefaults(), []).includes(C.SAVINGS)); });
+test('export: prompt line on top, merchants only when opted in', () => {
+  const A = C.analyze(data(), { ...opt, monthMode: 'txn' }); const t = C.summaryText(A);
+  assert.ok(t.startsWith(C.AI_PROMPT)); assert.ok(!/Netflix|סופר שופ/.test(t)); assert.match(C.summaryText(A, { merchants: true }), /סופר שופ/);
+});

@@ -350,10 +350,12 @@ export function insights(txs, opt = {}, hidden = {}) {
   return { enough: true, fullMonths: full.length, items: out, irregular };
 }
 // Text for the user to paste into an AI chat themselves: category x month totals only, no merchants or transactions.
-export function summaryText(A) {
+export const AI_PROMPT = 'נתח את ההוצאות וההכנסות שלי לפי הסיכום הבא, מצא דפוסים וחריגות, והצע שיפורים מעשיים עם הערכת סכום.';
+export function summaryText(A, { merchants = false } = {}) {
   const full = A.byMonth.filter(m => !m.partial).map(m => m.month), cats = A.byCategory.map(c => c.key);
   const rows = cats.map(c => `${c}: ${full.map(m => `${m} ₪${fmt(A.txs.filter(t => t.month === m && t.category === c).reduce((s, t) => s + t.amount, 0))}`).join(', ')}`);
-  return `סיכום הוצאות לפי קטגוריה וחודש (חודשים מלאים בלבד):\n${A.byMonth.filter(m => !m.partial).map(m => `${m.month}: הוצאות ₪${fmt(m.expenses)}, הכנסות ₪${fmt(m.income)}`).join('\n')}\n\n${rows.join('\n')}`;
+  const top = merchants ? `\n\nבתי עסק מובילים (כל התקופה):\n${A.byMerchant.slice(0, 10).map(m => `${m.key}: ₪${fmt(m.total)}`).join('\n')}` : '';
+  return `${AI_PROMPT}\n\nסיכום הוצאות לפי קטגוריה וחודש (חודשים מלאים בלבד):\n${A.byMonth.filter(m => !m.partial).map(m => `${m.month}: הוצאות ₪${fmt(m.expenses)}, הכנסות ₪${fmt(m.income)}`).join('\n')}\n\n${rows.join('\n')}${top}`;
 }
 
 // Categories offered on the transactions screen; always includes neutral/savings even before any transaction uses them.

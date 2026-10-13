@@ -67,7 +67,10 @@ function insightsView() {
   <button id="copysum" class="copy">העתק סיכום</button>${Object.keys(S.hiddenInsights).length ? '<button id="unhide" class="hide">הצג מוסתרות</button>' : ''}`;
   view.querySelectorAll('.hide').forEach(b => b.onclick = async () => { S.hiddenInsights[b.dataset.k] = 1; await save(); render(); });
   const u = $('#unhide'); if (u) u.onclick = async () => { S.hiddenInsights = {}; await save(); render(); };
-  $('#copysum').onclick = async () => { const A = C.analyze(S.txs, { ...opts(), monthMode: 'txn' }); const t = C.summaryText(A); try { await navigator.clipboard.writeText(t); alert('הסיכום הועתק (סכומים לפי קטגוריה וחודש בלבד)'); } catch { modal(`<pre>${esc(t)}</pre>`); } };
+  $('#copysum').onclick = () => { const A = C.analyze(S.txs, { ...opts(), monthMode: 'txn' });
+    modal(`<h2>ייצוא ל-AI</h2><p style="font-size:13px;color:var(--muted)">זה בדיוק מה שיועתק. אפשר לערוך לפני ההעתקה. שום דבר לא נשלח מהאפליקציה.</p><label><input type="checkbox" id="wm"> לכלול שמות בתי עסק (חושף יותר מידע)</label><textarea id="sumtxt" rows="14" style="width:100%;font:13px Heebo,sans-serif"></textarea><button id="docopy" class="copy">העתק</button>`);
+    const ta = $('#sumtxt'), fill = () => { ta.value = C.summaryText(A, { merchants: $('#wm').checked }); }; fill(); $('#wm').onchange = fill;
+    $('#docopy').onclick = async () => { try { await navigator.clipboard.writeText(ta.value); alert('הועתק'); } catch { ta.select(); document.execCommand('copy'); alert('הועתק'); } }; };
 }
 function savingsModal() {
   const A = all(); const tot = A.savings.reduce((s, x) => s + x.monthly, 0);
