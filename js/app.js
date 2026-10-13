@@ -10,6 +10,10 @@ const ils = n => `<span class="num">₪ ${(n < 0 ? '-' : '') + C.fmt(Math.abs(n)
 const HM = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
 const mName = m => m ? `${HM[+m.slice(5) - 1]} ${m.slice(0, 4)}` : '';
 const COLORS = ['#0E3B36', '#E8A33D', '#3E8E6E', '#7FA7A0', '#D9C7A7', '#5E7B76'];
+// Spend scale (small -> large): darker/redder = bigger expense. Mapped by size relative to the largest category.
+const SPEND = ['#D9BE7E', '#E0A955', '#D97F3E', '#C0562F', '#93352A', '#5C1A20'];
+// rank 0 = largest (darkest); ranks spread evenly over the 6 shades
+const spendColor = (rank, n) => SPEND[5 - Math.min(5, Math.floor(rank / Math.max(1, n) * 6))];
 
 async function save() { await DB.set('state', C.backupPayload(S)); }
 async function load() { const st = await DB.get('state'); if (st) Object.assign(S, st); S.rules ||= C.rulesFromDefaults(); S.merchantRules ||= {}; }
@@ -29,7 +33,7 @@ function home() {
   const diff = prev ? M.total - prev.total : null;
   const cmp = prev ? (diff <= 0 ? `<span class="good">${ils(-diff)} פחות</span> מ${HM[+ms[i - 1].slice(5) - 1]}` : `${ils(diff)} יותר מ${HM[+ms[i - 1].slice(5) - 1]}`) : '';
   const max = Math.max(1, ...M.byCategory.map(c => c.total));
-  const cats = M.byCategory.map((c, k) => `<div class="bar"><span>${esc(c.key)}</span><div class="track"><div class="fill ${c.key === C.UNCAT ? 'hatch' : ''}" style="width:${Math.max(0, c.total / max * 100)}%;background:${c.key === C.UNCAT ? '' : COLORS[k % COLORS.length]}"></div></div>${ils(c.total)}</div>`).join('');
+  const cats = M.byCategory.map((c, k) => `<div class="bar"><span>${esc(c.key)}</span><div class="track"><div class="fill ${c.key === C.UNCAT ? 'hatch' : ''}" style="width:${Math.max(0, c.total / max * 100)}%;background:${c.key === C.UNCAT ? '' : spendColor(k, M.byCategory.length)}"></div></div>${ils(c.total)}</div>`).join('');
   const sav = A.savings[0];
   view.innerHTML = `<section class="hero"><div class="row"><span>${mName(S.month)}</span><small class="mmode">${S.settings.monthMode === 'charge' ? 'לפי חודש חיוב' : 'לפי חודש עסקה'}</small><span class="nav">
       <button id="prev" ${i <= 0 ? 'disabled' : ''}>› קודם</button><button id="next" ${i >= ms.length - 1 ? 'disabled' : ''}>הבא ‹</button></span></div>
