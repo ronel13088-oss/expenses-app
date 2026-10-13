@@ -3,7 +3,7 @@ import * as DB from './db.js';
 import { encryptBackup, decryptBackup } from './backup.js';
 import { pickImporter } from './importers.js';
 
-const S = { txs: [], rules: null, overrides: {}, settings: { monthMode: 'charge', preferSource: true, excludeNeutral: true }, tab: 'home', month: null };
+const S = { txs: [], rules: null, overrides: {}, merchantRules: {}, settings: { monthMode: 'charge', preferSource: true, excludeNeutral: true }, tab: 'home', month: null };
 const $ = s => document.querySelector(s); const view = $('#view'); const dlg = $('#dlg');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ils = n => `<span class="num">₪ ${(n < 0 ? '-' : '') + C.fmt(Math.abs(n))}</span>`;
@@ -11,9 +11,9 @@ const HM = ['ינואר','פברואר','מרץ','אפריל','מאי','יוני
 const mName = m => m ? `${HM[+m.slice(5) - 1]} ${m.slice(0, 4)}` : '';
 const COLORS = ['#0E3B36', '#E8A33D', '#3E8E6E', '#7FA7A0', '#D9C7A7', '#5E7B76'];
 
-async function save() { await DB.set('state', { txs: S.txs, rules: S.rules, overrides: S.overrides, settings: S.settings }); }
-async function load() { const st = await DB.get('state'); if (st) Object.assign(S, st); S.rules ||= C.rulesFromDefaults(); }
-const opts = () => ({ rules: S.rules, overrides: S.overrides, monthMode: S.settings.monthMode, preferSource: S.settings.preferSource, excludeNeutral: S.settings.excludeNeutral !== false, span: S.txs.map(t => t.date) });
+async function save() { await DB.set('state', C.backupPayload(S)); }
+async function load() { const st = await DB.get('state'); if (st) Object.assign(S, st); S.rules ||= C.rulesFromDefaults(); S.merchantRules ||= {}; }
+const opts = () => ({ rules: S.rules, overrides: S.overrides, monthMode: S.settings.monthMode, preferSource: S.settings.preferSource, excludeNeutral: S.settings.excludeNeutral !== false, merchantRules: S.merchantRules, span: S.txs.map(t => t.date) });
 const all = () => C.analyze(S.txs, opts());
 const ofMonth = m => C.analyze(S.txs.filter(t => C.monthOf(t, S.settings.monthMode) === m), opts());
 
@@ -31,7 +31,7 @@ function home() {
   const max = Math.max(1, ...M.byCategory.map(c => c.total));
   const cats = M.byCategory.map((c, k) => `<div class="bar"><span>${esc(c.key)}</span><div class="track"><div class="fill ${c.key === C.UNCAT ? 'hatch' : ''}" style="width:${Math.max(0, c.total / max * 100)}%;background:${c.key === C.UNCAT ? '' : COLORS[k % COLORS.length]}"></div></div>${ils(c.total)}</div>`).join('');
   const sav = A.savings[0];
-  view.innerHTML = `<section class="hero"><div class="row"><span>${mName(S.month)}</span><span class="nav">
+  view.innerHTML = `<section class="hero"><div class="row"><span>${mName(S.month)}</span><small class="mmode">${S.settings.monthMode === 'charge' ? 'לפי חודש חיוב' : 'לפי חודש עסקה'}</small><span class="nav">
       <button id="prev" ${i <= 0 ? 'disabled' : ''}>› קודם</button><button id="next" ${i >= ms.length - 1 ? 'disabled' : ''}>הבא ‹</button></span></div>
     <div class="big num">₪ ${C.fmt(M.total)}</div><div class="sub">הוצאות החודש${cmp ? ' · ' + cmp : ''}${M.byMonth[0]?.partial ? ' · <b>חודש חלקי – אין נתונים לכל החודש</b>' : ''}</div></section>
     <div class="card"><h2>לפי קטגוריה <button class="link" id="cats">סה"כ ${ils(M.total)}</button></h2>${cats}</div>
@@ -91,7 +91,7 @@ function rulesView() {
 }
 
 function settings() {
-  view.innerHTML = `<div class="card"><h2>הגדרות</h2>
+  view.innerHTML = `<div class="card"><h2>הגדרות</h2><p class="privacy" style="font-size:13px">🔒 כל הנתונים נשמרים רק במכשיר ולא נשלחים לשום שרת</p>
    <div class="grid2"><label>החודש של עסקה נקבע לפי</label><select id="mm"><option value="charge">תאריך החיוב</option><option value="date">תאריך העסקה</option></select>
    <label>קטגוריה מהקובץ (RiseUp) קודמת לחוקים</label><select id="ps"><option value="1">כן</option><option value="0">לא</option></select>
    <label>להוציא השקעות והעברות בין החשבונות שלי מהחישוב</label><select id="xn"><option value="1">כן</option><option value="0">לא</option></select></div>
@@ -105,10 +105,10 @@ function settings() {
   $('#ps').onchange = async e => { S.settings.preferSource = e.target.value === '1'; await save(); };
   $('#bk').onclick = async () => { const pw = $('#pw').value; if (pw.length < 8) return alert('סיסמה קצרה מדי');
     if (!confirm('אם תשכח את הסיסמה, לא תהיה דרך לפתוח את הגיבוי. להמשיך?')) return;
-    const blob = new Blob([await encryptBackup({ txs: S.txs, rules: S.rules, overrides: S.overrides, settings: S.settings }, pw)], { type: 'application/json' });
+    const blob = new Blob([await encryptBackup(C.backupPayload(S), pw)], { type: 'application/json' });
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `expenses-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click(); };
   $('#rs').onclick = () => { const f = document.createElement('input'); f.type = 'file'; f.accept = '.json'; f.onchange = async () => {
-    try { const o = await decryptBackup(await f.files[0].text(), $('#pw').value); Object.assign(S, o); await save(); alert('שוחזר'); S.tab = 'home'; render(); } catch { alert('הסיסמה שגויה או שהקובץ פגום'); } }; f.click(); };
+    try { const o = await decryptBackup(await f.files[0].text(), $('#pw').value); C.applyBackup(S, o); await save(); alert('שוחזר'); S.tab = 'home'; render(); } catch { alert('הסיסמה שגויה או שהקובץ פגום'); } }; f.click(); };
   $('#wipe').onclick = async () => { if (confirm('למחוק את כל הנתונים מהמכשיר?')) { await DB.clearAll(); location.reload(); } };
 }
 
@@ -132,7 +132,7 @@ async function importFile(f) {
     dlg.querySelectorAll('select,input').forEach(e => e.onchange = pv); pv();
     $('#cancel').onclick = () => { dlg.close(); res(0); };
     $('#ok').onclick = async () => { const t = C.rowsToTransactions(rows, cur(), { kind: $('#kind').value, expenseSign: $('#sign').value || undefined, fileName: f.name, company: C.cardCompanyOf(f.name) });
-      const m = C.mergeTransactions(S.txs, t); S.txs = C.markSettlements(m.list); await save(); dlg.close(); alert(`נוספו ${m.added} עסקאות${m.skipped ? `, ${m.skipped} כפולות דולגו` : ''}`); res(m.added); };
+      const dr = C.mergeRules(S.merchantRules, C.deriveSourceRules(t)); S.merchantRules = dr.rules; const m = C.mergeTransactions(S.txs, t); S.txs = C.markSettlements(m.list); await save(); dlg.close(); alert(`נוספו ${m.added} עסקאות${m.skipped ? `, ${m.skipped} כפולות דולגו` : ''}${dr.added ? `, ${dr.added} חוקי בית עסק נלמדו מהקטגוריות שבקובץ` : ''}`); res(m.added); };
     dlg.showModal();
   });
 }

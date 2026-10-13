@@ -157,6 +157,21 @@ export function markCrossSourceDupes(txs) {
   return txs;
 }
 
+// Derive merchant->category rules from a source file's own categories (e.g. RiseUp), via SOURCE_CATEGORY_MAP.
+// Catch-alls, income and card-company lines are skipped; majority category per merchant wins. Stored on device only.
+export function deriveSourceRules(txs) {
+  const votes = {};
+  for (const t of txs) { if (!(t.amount > 0) || cardCompanyOf(t.merchant)) continue; const c = mapSourceCategory(t.srcCategory);
+    if (!c || c === INCOME || /^הכנסות/.test(c)) continue; const nm = normMerchant(t.merchant); ((votes[nm] ||= {})[c] = (votes[nm][c] || 0) + 1); }
+  const out = {}; for (const [nm, v] of Object.entries(votes)) out[nm] = Object.entries(v).sort((a, b) => b[1] - a[1])[0][0];
+  return out;
+}
+export const mergeRules = (existing = {}, derived = {}) => { const o = { ...existing }; let added = 0; for (const [k, v] of Object.entries(derived)) if (!(k in o)) { o[k] = v; added++; } return { rules: o, added }; };
+// Everything the user decided lives here; backup/restore must round-trip all of it.
+export const BACKUP_KEYS = ['txs', 'rules', 'overrides', 'merchantRules', 'settings'];
+export const backupPayload = S => Object.fromEntries(BACKUP_KEYS.map(k => [k, S[k] ?? null]));
+export const applyBackup = (S, o) => { for (const k of BACKUP_KEYS) if (o[k] != null) S[k] = o[k]; return S; };
+
 export const TRANSFERS = 'העברות ומזומן', OWN = 'העברות בין חשבונות', INCOME = 'הכנסות', REFUNDS = 'זיכויים והחזרים';
 export const DEFAULT_RULES = [
   ['מזון וסופר', 'שופרסל,רמי לוי,ויקטורי,יוחננוף,מגה,טיב טעם,אושר עד,am:pm,ampm,סופר,מכולת,חצי חינם,carrefour,קרפור'],
@@ -202,6 +217,7 @@ const REFUND_RE = /החזר|זיכוי|ביטול|refund/i; const NEUTRAL = new 
 export function categorize(t, rules, overrides = {}, opts = {}) {
   const nm = normMerchant(t.merchant);
   if (overrides[nm]) return overrides[nm];
+  if (t.amount > 0 && opts.merchantRules?.[nm] && !cardCompanyOf(t.merchant)) return opts.merchantRules[nm];
   if (t.kind === 'checking' && t.amount > 0 && (cardCompanyOf(t.merchant) || /מסטרקרד|mastercard|ויזה|visa/i.test(t.merchant))) return CARD_UNDETAILED;
   if (t.amount < 0 && BIT_RE.test(t.merchant)) return PENDING; // incoming bit/PayBox: not income until decided per sender
   const sorted = [...rules].sort((a, b) => b.keyword.length - a.keyword.length);
@@ -223,9 +239,9 @@ export const isForeignLikely = t => !!t.currency || (t.kind === 'card' && FX_HIN
 
 // excludeNeutral (default on): investments + own-account transfers are excluded from expenses and income and shown separately.
 // Other transfers/cheques/bit stay expenses; their payees are listed in reviewPayees for a one-time per-payee decision (saved as override).
-export function analyze(txs, { rules, overrides = {}, monthMode = 'charge', preferSource = false, excludeNeutral = true, span = null } = {}) {
+export function analyze(txs, { rules, overrides = {}, monthMode = 'charge', preferSource = false, excludeNeutral = true, span = null, merchantRules = null } = {}) {
   rules = rules || rulesFromDefaults();
-  const live = txs.filter(t => !t.excluded).map(t => ({ ...t, amount: t.residual ?? t.amount, category: categorize(t, rules, overrides, { preferSource }), month: monthOf(t, monthMode) }));
+  const live = txs.filter(t => !t.excluded).map(t => ({ ...t, amount: t.residual ?? t.amount, category: categorize(t, rules, overrides, { preferSource, merchantRules }), month: monthOf(t, monthMode) }));
   markRecurringCheques(live, overrides);
   const isInc = c => c === INCOME || /^הכנסות/.test(c); const isNeutral = c => NEUTRAL.has(c) || /^(חסכון|חיסכון)/.test(c);
   const neutral = live.filter(t => isNeutral(t.category));
