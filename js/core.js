@@ -218,9 +218,9 @@ export const CASH_RE = /משיכ(ה|ת)? (מ)?(בנקט|כספומט|מזומן)
 export function categorize(t, rules, overrides = {}, opts = {}) {
   const nm = normMerchant(t.merchant);
   if (t.id && overrides['id:' + t.id]) return overrides['id:' + t.id];
-  if (overrides[nm]) return overrides[nm];
-  // Large cash withdrawal (> 1000): default household-bills category; per-transaction override wins (see above).
+  // Large cash withdrawal (> 1000): default household-bills category; per-transaction override wins; beats a payee-wide override (a payee decision on 'משיכה מבנקט' must not swallow large withdrawals).
   if (t.amount > 1000 && CASH_RE.test(t.merchant)) return 'חשבונות הבית';
+  if (overrides[nm]) return overrides[nm];
   if (t.amount > 0 && opts.merchantRules?.[nm] && !cardCompanyOf(t.merchant)) return opts.merchantRules[nm];
   if (t.kind === 'checking' && t.amount > 0 && (cardCompanyOf(t.merchant) || /מסטרקרד|mastercard|ויזה|visa/i.test(t.merchant))) return CARD_UNDETAILED;
   if (t.amount < 0 && BIT_RE.test(t.merchant)) return PENDING; // incoming bit/PayBox: not income until decided per sender

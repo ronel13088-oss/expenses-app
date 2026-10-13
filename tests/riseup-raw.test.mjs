@@ -18,3 +18,10 @@ test('per-transaction override beats cash rule; does not affect other withdrawal
   const ov = { 'id:x1': 'תיירות ונופש' };
   assert.equal(C.categorize(a, r, ov), 'תיירות ונופש'); assert.equal(C.categorize(b, r, ov), 'חשבונות הבית');
 });
+
+test('cash rule beats payee-wide override, per-transaction override still wins', async () => {
+  const C = await import('../js/core.js'); const t = { id: 'x1', merchant: 'משיכה מבנקט', amount: 1300, kind: 'checking' };
+  assert.equal(C.categorize(t, [], { 'משיכה מבנקט': C.TRANSFERS }), 'חשבונות הבית');
+  assert.equal(C.categorize(t, [], { 'משיכה מבנקט': C.TRANSFERS, 'id:x1': 'פנאי' }), 'פנאי');
+  assert.equal(C.categorize({ ...t, amount: 450 }, [], { 'משיכה מבנקט': C.TRANSFERS }), C.TRANSFERS);
+});
