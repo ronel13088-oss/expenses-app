@@ -1,0 +1,10 @@
+month,merchant,src,card,date,charge_date,amount,inst_no,inst_tot,category,srctype,orig
+2026-01,שופרסל דיל בדיקה,isracard,1111,05/01/2026,10/02/2026,-300,,,,creditCard,-300
+2026-01,NETFLIX.COM,isracard,1111,08/01/2026,10/02/2026,-55.9,,,,creditCard,-55.9
+2026-01,וולט בדיקה,isracard,2222,20/01/2026,10/02/2026,-120,,,,creditCard,-120
+2026-02,רהיטי דמה,isracard,2222,01/02/2026,10/02/2026,-250,2,6,,creditCard,-1500
+2026-02,NETFLIX.COM,isracard,1111,08/02/2026,10/03/2026,-55.9,,,,creditCard,-55.9
+2026-02,זיכוי שופרסל דיל בדיקה,isracard,1111,09/02/2026,10/03/2026,40,,,,creditCard,40
+2026-03,NETFLIX.COM,isracard,1111,08/03/2026,10/04/2026,-55.9,,,,creditCard,-55.9
+2026-04,NETFLIX.COM,isracard,1111,08/04/2026,10/05/2026,-55.9,,,,creditCard,-55.9
+2026-02,משכורת דמה,poalim,9999,01/02/2026,01/02/2026,10000,,,,checkingAccount,0

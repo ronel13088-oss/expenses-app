@@ -1,0 +1,13 @@
+# Never commit real financial data
+finance/
+*.real.*
+*-real.*
+private/
+**/riseup-clean*
+**/hapoalim-transactions*
+*.xlsx
+*.xls
+!tests/fixtures/*.xlsx
+expenses-backup-*.json
+node_modules/
+.DS_Store

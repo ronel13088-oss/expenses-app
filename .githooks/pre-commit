@@ -1,0 +1,3 @@
+#!/bin/sh
+node scripts/check-no-real-data.mjs || exit 1
+node --test tests/ >/dev/null || { echo "tests failed"; exit 1; }
