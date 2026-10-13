@@ -56,10 +56,32 @@ test('partial months flagged and excluded from monthly average', () => {
 
 test('bit transfer in two sources (±1 day, different wording) counted once', () => {
   const mk = (date, merchant, amount, file) => ({ date, chargeDate: date, merchant, amount, kind: 'checking', file, id: file + date + amount });
-  const txs = [mk('2026-03-10', 'העברת כסף bit', -500, 'riseup.csv'), mk('2026-03-11', 'העברת bit כסף', -500, 'bank.csv'),
-    mk('2026-03-10', 'העברת כסף bit', -500, 'riseup.csv#2'.slice(0, 10)), // same file, second real transfer
-    mk('2026-03-20', 'העברת כסף bit', -80, 'riseup.csv'), mk('2026-03-25', 'העברת bit כסף', -80, 'bank.csv'), // >1 day apart
+  const txs = [mk('2026-03-10', 'bit קבלה דמו א', -500, 'riseup.csv'), mk('2026-03-11', 'bit קבלה דמו ב', -500, 'bank.csv'),
+    mk('2026-03-10', 'bit קבלה דמו א', -500, 'riseup.csv#2'.slice(0, 10)), // same file, second real transfer
+    mk('2026-03-20', 'bit קבלה דמו א', -80, 'riseup.csv'), mk('2026-03-25', 'bit קבלה דמו ב', -80, 'bank.csv'), // >1 day apart
     mk('2026-03-12', 'שופרסל', -500, 'bank.csv')];
   C.markSettlements(txs);
   assert.deepStrictEqual(txs.map(t => !!t.excluded), [false, true, false, false, false, false]);
+});
+
+test('recurring same-amount cheque -> housing; incoming bit pending until decided; card company line -> undetailed', () => {
+  const ch = m => ({ date: `2026-0${m}-10`, chargeDate: `2026-0${m}-10`, merchant: 'שיק', amount: 1000, kind: 'checking', file: 'a' });
+  const bit = { date: '2026-03-05', chargeDate: '2026-03-05', merchant: 'bit קבלה דמו ב', amount: -300, kind: 'checking', file: 'a' };
+  const mc = { date: '2026-03-02', chargeDate: '2026-03-02', merchant: 'MASTERCARD DEMO', amount: 900, kind: 'checking', file: 'a' };
+  let a = C.analyze([ch(3), ch(4), ch(5), bit, mc]);
+  assert.ok(a.txs.filter(t => t.merchant === 'שיק').every(t => t.category === C.HOUSING));
+  assert.equal(a.txs.find(t => t.amount === -300).category, C.PENDING);
+  assert.equal(Math.abs(a.byMonth.find(m => m.month === '2026-03').income), 0);
+  assert.ok(!C.BIT_RE.test('חברה לביט'));
+  assert.equal(a.pendingIncoming.length, 1);
+  assert.equal(a.txs.find(t => t.merchant === 'MASTERCARD DEMO').category, C.CARD_UNDETAILED);
+  a = C.analyze([ch(3), bit], { overrides: { [C.normMerchant(bit.merchant)]: C.REFUNDS } });
+  assert.equal(a.total, 700); assert.equal(a.pendingIncoming.length, 0);
+  // only 2 months -> not housing
+  assert.equal(C.analyze([ch(3), ch(4)]).txs[0].category, C.TRANSFERS);
+});
+test('RiseUp catch-all falls back to our rules; תשלומים -> transfers', () => {
+  const t = (merchant, srcCategory) => ({ date: '2026-03-01', merchant, amount: 50, kind: 'card', srcCategory });
+  assert.equal(C.categorize(t('פארם דמו', 'הוצאות משתנות'), C.rulesFromDefaults(), {}, { preferSource: true }), 'ביטוח ובריאות');
+  assert.equal(C.categorize(t('פלוני', 'תשלומים'), C.rulesFromDefaults(), {}, { preferSource: true }), C.TRANSFERS);
 });

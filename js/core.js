@@ -40,7 +40,7 @@ const H = {
   instNo: /^(inst_no|תשלום( מספר)?)$/i, instTot: /^(inst_tot|מתוך|מס(פר)? תשלומים)$/i,
   srctype: /^srctype$/i, src: /^(src|source|חברה|מקור)$/i, card: /^(card|כרטיס|4 ספרות.*)$/i, category: /^(category|קטגוריה|ענף)$/i,
 };
-export const UNCAT = 'לא מסווג';
+export const UNCAT = 'לא מסווג', CARD_UNDETAILED = 'חיובי כרטיס ללא פירוט', HOUSING = 'דיור ושכירות', PENDING = 'לבדיקה – bit נכנס';
 export const FIELDS = Object.keys(H);
 
 export function detectColumns(rows) {
@@ -145,7 +145,7 @@ export function markSettlements(txs, { tol = 0.03 } = {}) {
 }
 // Same checking-account bit/paybox line exported by two sources (e.g. RiseUp + bank) with different wording:
 // same amount, date within ±1 day, bit-like description, different file -> later file's copy is excluded.
-export const BIT_RE = /(^|[^a-z])(bit|paybox)([^a-z]|$)|ביט|פייבוקס/i;
+export const BIT_RE = /(^|[^a-z])(bit|paybox)([^a-z]|$)|(^|[^א-ת])(ביט|פייבוקס)([^א-ת]|$)/i; // not 'לביט' (=ביטוח)
 const dayNum = d => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5;
 export function markCrossSourceDupes(txs) {
   const cand = txs.filter(t => !t.excluded && t.kind === 'checking' && BIT_RE.test(t.merchant));
@@ -161,14 +161,17 @@ export const TRANSFERS = 'העברות ומזומן', OWN = 'העברות בין
 export const DEFAULT_RULES = [
   ['מזון וסופר', 'שופרסל,רמי לוי,ויקטורי,יוחננוף,מגה,טיב טעם,אושר עד,am:pm,ampm,סופר,מכולת,חצי חינם,carrefour,קרפור'],
   ['מסעדות ומשלוחים', 'wolt,וולט,תן ביס,10bis,מסעדה,מסעדת,קפה,cafe,פיצה,פיצריה,בורגר,מקדונלד,מקדונלדס,ארומה,גרג,סושי,japanika,פלאפל,שווארמה'],
-  ['תחבורה ודלק', 'פז,דלק,סונול,דור אלון,yellow,רב קו,רב-קו,gett,מוניות,pango,פנגו,סלופארק,חניון,רכבת,אגד,כביש 6'],
+  ['תחבורה ודלק', 'רב-פס,רב פס,תחבורה,פז,דלק,סונול,דור אלון,yellow,רב קו,רב-קו,gett,מוניות,pango,פנגו,סלופארק,חניון,רכבת,אגד,כביש 6'],
   ['מנויים ודיגיטל', 'netflix,spotify,apple.com,google,youtube,disney,amazon prime,openai,chatgpt,microsoft,adobe,icloud,yes,partner,פרטנר,סלקום,cellcom,פלאפון,גולן טלקום'],
   ['חשבונות הבית', 'חשמל,מי אביבים,ארנונה,עירית,עיריית,בזק,ועד בית'],
-  ['ביטוח ובריאות', 'ביטוח,ביטוחי,בטוח,הראל,מגדל,הפניקס,כלל ביטוח,מנורה,מכבי,כללית,מאוחדת,לאומית,סופר-פארם,סופר פארם,בית מרקחת'],
-  ['ביגוד וקניות', 'זארה,zara,h&m,קסטרו,terminal x,aliexpress,amazon,shein,איקאה,ikea,הום סנטר'],
+  ['ביטוח ובריאות', 'פארם,רופא,מרפאה,ביטוח,ביטוחי,בטוח,הראל,מגדל,הפניקס,כלל ביטוח,מנורה,מכבי,כללית,מאוחדת,לאומית,סופר-פארם,סופר פארם,בית מרקחת'],
+  ['ביגוד וקניות', 'אופנה,אופניים,אופנים,נעליים,זארה,zara,h&m,קסטרו,terminal x,aliexpress,amazon,shein,איקאה,ikea,הום סנטר'],
   ['תיירות ונופש', 'agoda,booking,airbnb,אל על,elal,wizz,ryanair,expedia,trip.com,מלון,hotel'],
   ['עמלות בנק', 'עמלה,עמלות,ע.מפעולות,דמי ניהול חשבון,דמי כרטיס'],
   ['השקעות', 'ני"ע,ניע,מטח-קניה,מט"ח'],
+  ['פנאי ובילוי', 'לייב,live,הופעה,הופעות,מוזיקה,בר,פאב,קולנוע,סינמה,תיאטרון,כרטיסים,event,eventim,goshow,לוטו,מפעל הפיס,פיס'],
+  ['מסים ואגרות', 'מס הכנסה,ביטוח לאומי,אגרה,רשות המסים'],
+  ['בית ותחזוקה', 'מנעולים,מנעולן,טמבור,טמבוריה,חומרי בניין,אינסטלציה,פרחים,משתלה'],
   [OWN, 'זיכוי מלאומי,העברה לחשבון שלי,העברה מחשבון שלי,העברה עצמית'],
   [TRANSFERS, 'bit,ביט,paybox,פייבוקס,העב,העברה,העברת,משיכה מבנקט,כספומט,שיק'],
 ];
@@ -178,7 +181,7 @@ export const SOURCE_CATEGORY_MAP = {
   'פארמה': 'ביטוח ובריאות', 'ביטוח': 'ביטוח ובריאות', 'בריאות': 'ביטוח ובריאות', 'תקשורת': 'מנויים ודיגיטל', 'דיגיטל': 'מנויים ודיגיטל',
   'מים': 'חשבונות הבית', 'חשמל': 'חשבונות הבית', 'עמלות': 'עמלות בנק', 'שיק': TRANSFERS, 'מזומן': TRANSFERS, 'העברות': TRANSFERS,
   'חסכון חד פעמי': 'חיסכון', 'חסכון': 'חיסכון', 'הכנסות קבועות': INCOME, 'הכנסות משתנות': INCOME,
-  'הוצאות משתנות': null, 'כללי': null, 'תשלומים': null,
+  'הוצאות משתנות': null, 'כללי': null, 'תשלומים': TRANSFERS, // RiseUp 'תשלומים' = payment-app/person payments -> payee review
 };
 export const mapSourceCategory = c => { if (!c) return null; const k = String(c).trim(); return k in SOURCE_CATEGORY_MAP ? SOURCE_CATEGORY_MAP[k] : k; };
 // Keywords shorter than 2 chars are ignored; matching is on word boundaries. Hebrew keywords may take one
@@ -199,6 +202,8 @@ const REFUND_RE = /החזר|זיכוי|ביטול|refund/i; const NEUTRAL = new 
 export function categorize(t, rules, overrides = {}, opts = {}) {
   const nm = normMerchant(t.merchant);
   if (overrides[nm]) return overrides[nm];
+  if (t.kind === 'checking' && t.amount > 0 && (cardCompanyOf(t.merchant) || /מסטרקרד|mastercard|ויזה|visa/i.test(t.merchant))) return CARD_UNDETAILED;
+  if (t.amount < 0 && BIT_RE.test(t.merchant)) return PENDING; // incoming bit/PayBox: not income until decided per sender
   const sorted = [...rules].sort((a, b) => b.keyword.length - a.keyword.length);
   let cat = null; const src = mapSourceCategory(t.srcCategory);
   if (opts.preferSource && src && src !== INCOME) cat = src;
@@ -221,9 +226,11 @@ export const isForeignLikely = t => !!t.currency || (t.kind === 'card' && FX_HIN
 export function analyze(txs, { rules, overrides = {}, monthMode = 'charge', preferSource = false, excludeNeutral = true, span = null } = {}) {
   rules = rules || rulesFromDefaults();
   const live = txs.filter(t => !t.excluded).map(t => ({ ...t, amount: t.residual ?? t.amount, category: categorize(t, rules, overrides, { preferSource }), month: monthOf(t, monthMode) }));
+  markRecurringCheques(live, overrides);
   const isInc = c => c === INCOME || /^הכנסות/.test(c); const isNeutral = c => NEUTRAL.has(c) || /^(חסכון|חיסכון)/.test(c);
   const neutral = live.filter(t => isNeutral(t.category));
-  const exp = live.filter(t => !isInc(t.category) && !(excludeNeutral && isNeutral(t.category)));
+  const pend = live.filter(t => t.category === PENDING);
+  const exp = live.filter(t => t.category !== PENDING && !isInc(t.category) && !(excludeNeutral && isNeutral(t.category)));
   const sumBy = (arr, key) => { const o = {}; for (const t of arr) o[key(t)] = (o[key(t)] || 0) + t.amount; return o; };
   const months = [...new Set(live.map(t => t.month))].sort();
   // coverage: a month is partial if the data's date span does not cover it (allow 3 days slack at each end)
@@ -238,17 +245,25 @@ export function analyze(txs, { rules, overrides = {}, monthMode = 'charge', pref
   const merchName = {}; exp.forEach(t => merchName[normMerchant(t.merchant)] ??= t.merchant.trim());
   const byMerchant = Object.entries(sumBy(exp, t => normMerchant(t.merchant))).map(([k, v]) => ({ key: merchName[k], norm: k, total: r2(v), count: exp.filter(t => normMerchant(t.merchant) === k).length })).sort((a, b) => b.total - a.total);
   const recurring = months.length >= 3 ? detectRecurring(exp) : null;
-  const reviewPayees = byMerchant.filter(m => !overrides[m.norm] && exp.some(t => t.category === TRANSFERS && normMerchant(t.merchant) === m.norm))
-    .map(m => ({ ...m, fixed: !!recurring?.some(r => r.norm === m.norm) }));
+  const reviewPayees = byMerchant.filter(m => !overrides[m.norm] && exp.some(t => (t.category === TRANSFERS || (t.fixed && t.category === HOUSING)) && normMerchant(t.merchant) === m.norm))
+    .map(m => ({ ...m, fixed: !!recurring?.some(r => r.norm === m.norm), suggested: exp.find(t => normMerchant(t.merchant) === m.norm && t.fixed) ? HOUSING : null }));
   const res = { months, byMonth, partialMonths: byMonth.filter(m => m.partial).map(m => m.month), total,
     monthlyAvg: full.length ? r2(full.reduce((s, m) => s + m.expenses, 0) / full.length) : (months.length ? r2(total / months.length) : 0),
     byCategory, byMerchant, top10: byMerchant.slice(0, 10), recurring, reviewPayees, txs: live,
+    pendingIncoming: Object.values(pend.reduce((o, t) => { const k = normMerchant(t.merchant); (o[k] ||= { key: t.merchant.trim(), norm: k, total: 0, count: 0 }); o[k].total = r2(o[k].total - t.amount); o[k].count++; return o; }, {})),
     neutral: { total: r2(neutral.reduce((s, t) => s + t.amount, 0)), count: neutral.length, excluded: excludeNeutral },
-    excluded: txs.filter(t => t.excluded), residuals: txs.filter(t => t.residual != null),
+    excluded: txs.filter(t => t.excluded && !t.dupOf), dupes: txs.filter(t => t.dupOf).map(t => ({ ...t, month: monthOf(t, monthMode), category: 'כפילות' })), residuals: txs.filter(t => t.residual != null),
     refunds: r2(-exp.filter(t => t.amount < 0).reduce((s, t) => s + t.amount, 0)),
     foreign: exp.filter(t => t.currency).length, foreignLikely: exp.filter(isForeignLikely).length, installments: exp.filter(t => t.instTot > 1).length };
   res.savings = suggestSavings(res);
   return res;
+}
+// Same-amount cheque (or standing transfer) in >=3 distinct months -> housing/fixed suggestion, unless the user decided otherwise.
+export const CHEQUE_RE = /שיק|צ'ק|צק |cheque|check/i;
+export function markRecurringCheques(live, overrides = {}) {
+  const g = {}; for (const t of live) if (t.amount > 0 && t.category === TRANSFERS && CHEQUE_RE.test(t.merchant) && !overrides[normMerchant(t.merchant)]) (g[t.amount] ||= []).push(t);
+  for (const arr of Object.values(g)) if (new Set(arr.map(t => t.date.slice(0, 7))).size >= 3) for (const t of arr) { t.category = HOUSING; t.fixed = true; }
+  return live;
 }
 const r2 = n => Math.round(n * 100) / 100;
 const median = a => { const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
