@@ -172,6 +172,7 @@ export const BACKUP_KEYS = ['txs', 'rules', 'overrides', 'merchantRules', 'setti
 export const backupPayload = S => Object.fromEntries(BACKUP_KEYS.map(k => [k, S[k] ?? null]));
 export const applyBackup = (S, o) => { for (const k of BACKUP_KEYS) if (o[k] != null) S[k] = o[k]; return S; };
 
+export const SAVINGS = 'חיסכון והשקעות';
 export const TRANSFERS = 'העברות ומזומן', OWN = 'העברות בין חשבונות', INCOME = 'הכנסות', REFUNDS = 'זיכויים והחזרים';
 export const DEFAULT_RULES = [
   ['מזון וסופר', 'שופרסל,רמי לוי,ויקטורי,יוחננוף,מגה,טיב טעם,אושר עד,am:pm,ampm,סופר,מכולת,חצי חינם,carrefour,קרפור'],
@@ -354,3 +355,6 @@ export function summaryText(A) {
   const rows = cats.map(c => `${c}: ${full.map(m => `${m} ₪${fmt(A.txs.filter(t => t.month === m && t.category === c).reduce((s, t) => s + t.amount, 0))}`).join(', ')}`);
   return `סיכום הוצאות לפי קטגוריה וחודש (חודשים מלאים בלבד):\n${A.byMonth.filter(m => !m.partial).map(m => `${m.month}: הוצאות ₪${fmt(m.expenses)}, הכנסות ₪${fmt(m.income)}`).join('\n')}\n\n${rows.join('\n')}`;
 }
+
+// Categories offered on the transactions screen; always includes neutral/savings even before any transaction uses them.
+export const pickerCats = (rules = [], txs = []) => [...new Set([...rules.map(r => r.category), ...txs.map(t => t.category), UNCAT, SAVINGS, OWN])];

@@ -30,3 +30,8 @@ test('summary text is real text; telecom not a saving; no double count; meaningl
   assert.ok(!I.items.some(x => x.title === 'YES' && x.saving)); assert.ok(!I.items.some(x => x.title === C.CARD_UNDETAILED));
   const keys = I.items.filter(x => x.saving && x.title === 'Netflix'); assert.equal(keys.length, 1);
 });
+test('savings category is neutral (not expense)', () => {
+  const t = { id: 'a|b|5000', date: '2026-05-10', merchant: 'העברה', amount: 5000, kind: 'checking' };
+  const A = C.analyze([t], { overrides: { 'id:a|b|5000': C.SAVINGS } }); assert.equal(A.total, 0); assert.equal(A.neutral.count, 1);
+});
+test('savings offered in picker before any use', () => { assert.ok(C.pickerCats(C.rulesFromDefaults(), []).includes(C.SAVINGS)); });
