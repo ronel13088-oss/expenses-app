@@ -214,9 +214,13 @@ const REFUND_RE = /החזר|זיכוי|ביטול|refund/i; const NEUTRAL = new 
 // Order: user override -> keyword rules -> mapped source category -> sign fallback.
 // Money in (amount<0): neutral categories (investments, transfers) stay; card credits / refund wording -> refund
 // (negative expense in its category); other checking inflows -> income.
+export const CASH_RE = /משיכ(ה|ת)? (מ)?(בנקט|כספומט|מזומן)|משיכת מזומן|כספומט|\batm\b/i;
 export function categorize(t, rules, overrides = {}, opts = {}) {
   const nm = normMerchant(t.merchant);
+  if (t.id && overrides['id:' + t.id]) return overrides['id:' + t.id];
   if (overrides[nm]) return overrides[nm];
+  // Large cash withdrawal (> 1000): default household-bills category; per-transaction override wins (see above).
+  if (t.amount > 1000 && CASH_RE.test(t.merchant)) return 'חשבונות הבית';
   if (t.amount > 0 && opts.merchantRules?.[nm] && !cardCompanyOf(t.merchant)) return opts.merchantRules[nm];
   if (t.kind === 'checking' && t.amount > 0 && (cardCompanyOf(t.merchant) || /מסטרקרד|mastercard|ויזה|visa/i.test(t.merchant))) return CARD_UNDETAILED;
   if (t.amount < 0 && BIT_RE.test(t.merchant)) return PENDING; // incoming bit/PayBox: not income until decided per sender

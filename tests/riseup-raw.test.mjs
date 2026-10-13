@@ -7,3 +7,14 @@ test('RiseUp raw Hebrew export auto-detected', () => {
   assert.equal(tx.length, 2); assert.equal(tx[0].chargeDate, '2026-02-10'); assert.equal(tx[0].kind, 'card');
   assert.equal(tx[0].instTot, 3); assert.equal(tx[1].card, '8901'); assert.equal(tx[1].kind, 'checking');
 });
+test('cash withdrawal over 1000 -> household bills; smaller unchanged', () => {
+  const big = { merchant: 'משיכה מבנקט', amount: 1300, kind: 'checking' }, small = { ...big, amount: 450 };
+  const r = C.rulesFromDefaults();
+  assert.equal(C.categorize(big, r), 'חשבונות הבית');
+  assert.notEqual(C.categorize(small, r), 'חשבונות הבית');
+});
+test('per-transaction override beats cash rule; does not affect other withdrawals', () => {
+  const r = C.rulesFromDefaults(); const a = { id: 'x1', merchant: 'משיכה מבנקט', amount: 1500, kind: 'checking' }, b = { ...a, id: 'x2' };
+  const ov = { 'id:x1': 'תיירות ונופש' };
+  assert.equal(C.categorize(a, r, ov), 'תיירות ונופש'); assert.equal(C.categorize(b, r, ov), 'חשבונות הבית');
+});

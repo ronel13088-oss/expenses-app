@@ -61,7 +61,7 @@ function txsView() {
   view.innerHTML = `<div class="card"><h2>עסקאות · ${mName(S.month)}</h2><p style="font-size:13px;color:var(--muted)">שינוי קטגוריה נשמר כחוק לבית העסק הזה.</p>
   ${list.map((t, k) => `<div class="li"><span>${esc(t.merchant)}<small>${t.date.split('-').reverse().join('/')}${t.instTot > 1 ? ` · תשלום ${t.instNo}/${t.instTot}` : ''}${t.currency ? ` · ${esc(t.currency)} ${t.origAmount ?? ''}` : ''}${t.amount < 0 ? ' · זיכוי' : ''}${t.residual != null ? ' · פער לא מפורט' : ''}${t.dupOf ? ' · <b class="dup">כפילות – לא נספר</b>' : ''}</small>
    <select data-k="${k}">${cats.map(c => `<option ${c === t.category ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></span>${ils(t.amount)}</div>`).join('')}</div>`;
-  view.querySelectorAll('select').forEach(s => s.onchange = async () => { S.overrides[C.normMerchant(list[s.dataset.k].merchant)] = s.value; await save(); render(); });
+  view.querySelectorAll('select').forEach(s => s.onchange = async () => { { const t = list[s.dataset.k]; S.overrides[C.CASH_RE.test(t.merchant) && t.id ? 'id:' + t.id : C.normMerchant(t.merchant)] = s.value; } await save(); render(); });
 }
 
 function trend() {
@@ -83,7 +83,7 @@ function rulesView() {
    <div class="grid2"><input id="kw" type="text" placeholder="מילת מפתח"><input id="cat" type="text" placeholder="קטגוריה" list="catl"></div>
    <datalist id="catl">${Object.keys(by).map(c => `<option>${esc(c)}</option>`).join('')}</datalist><p><button class="btn" id="add">הוספה</button> <button class="btn alt" id="reset">שחזור ברירת מחדל</button></p>
    ${Object.entries(by).map(([c, ks]) => `<h3>${esc(c)}</h3><div class="chips">${ks.map(([k, i]) => `<span class="chip">${esc(k)} <a href="#" data-i="${i}">✕</a></span>`).join('')}</div>`).join('')}</div>
-   <div class="card"><h2>תיקונים שלך (${Object.keys(S.overrides).length})</h2>${Object.entries(S.overrides).map(([m, c]) => `<div class="li"><span>${esc(m)}<small>${esc(c)}</small></span><a href="#" data-o="${esc(m)}">מחיקה</a></div>`).join('')}</div>`;
+   <div class="card"><h2>תיקונים שלך (${Object.keys(S.overrides).length})</h2>${Object.entries(S.overrides).map(([m, c]) => `<div class="li"><span>${esc(m.startsWith('id:') ? (([d, n, a]) => `${n} · ${d} · ₪${a}`)(m.slice(3).split('|')) : m)}<small>${esc(c)}</small></span><a href="#" data-o="${esc(m)}">מחיקה</a></div>`).join('')}</div>`;
   $('#add').onclick = async () => { const k = $('#kw').value.trim(), c = $('#cat').value.trim(); if (k && c) { S.rules.push({ keyword: k, category: c }); await save(); render(); } };
   $('#reset').onclick = async () => { if (confirm('לשחזר את חוקי ברירת המחדל?')) { S.rules = C.rulesFromDefaults(); await save(); render(); } };
   view.querySelectorAll('[data-i]').forEach(a => a.onclick = async e => { e.preventDefault(); S.rules.splice(+a.dataset.i, 1); await save(); render(); });
