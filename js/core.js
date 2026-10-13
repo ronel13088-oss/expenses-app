@@ -145,7 +145,7 @@ export function markSettlements(txs, { tol = 0.03 } = {}) {
 }
 // Same checking-account bit/paybox line exported by two sources (e.g. RiseUp + bank) with different wording:
 // same amount, date within ±1 day, bit-like description, different file -> later file's copy is excluded.
-export const BIT_RE = /(^|[^a-z])(bit|paybox)([^a-z]|$)|(^|[^א-ת])(ביט|פייבוקס)([^א-ת]|$)/i; // not 'לביט' (=ביטוח)
+export const BIT_RE = /(^|[^a-z])(bit|paybox|pepper ?pay|blink)([^a-z]|$)|(^|[^א-ת])(ביט|פייבוקס|בלינק|פפר ?פיי)([^א-ת]|$)/i; // payment apps // not 'לביט' (=ביטוח)
 const dayNum = d => Date.UTC(+d.slice(0, 4), +d.slice(5, 7) - 1, +d.slice(8, 10)) / 864e5;
 export function markCrossSourceDupes(txs) {
   const cand = txs.filter(t => !t.excluded && t.kind === 'checking' && BIT_RE.test(t.merchant));

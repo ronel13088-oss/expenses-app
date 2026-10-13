@@ -85,3 +85,8 @@ test('RiseUp catch-all falls back to our rules; תשלומים -> transfers', ()
   assert.equal(C.categorize(t('פארם דמו', 'הוצאות משתנות'), C.rulesFromDefaults(), {}, { preferSource: true }), 'ביטוח ובריאות');
   assert.equal(C.categorize(t('פלוני', 'תשלומים'), C.rulesFromDefaults(), {}, { preferSource: true }), C.TRANSFERS);
 });
+test('incoming payment-app money (bit/PayBox/Blink) is pending, salary stays income', () => {
+  const r = (merchant, amount) => ({ date: '2026-03-05', chargeDate: '2026-03-05', merchant, amount, kind: 'checking', file: 'a', srcCategory: 'הכנסות משתנות' });
+  const a = C.analyze([r('בלינק דמו בעמ', -700), r('PAYBOX DEMO', -50), r('משכורת חברה דמו', -9000)]);
+  assert.equal(a.byMonth[0].income, 9000); assert.equal(a.pendingIncoming.length, 2);
+});
