@@ -318,7 +318,7 @@ export const fmt = n => Math.round(n).toLocaleString('en-US');
 // Stage 2 insights: computed on-device only. Uses transaction month, full months only (current/partial excluded).
 // "חיסכון" only for cancellable recurring charges and price increases; deviations are shown as "מעל הממוצע".
 export const IRREGULAR_RE = /דיור|שכירות|חופש|טיסות|נופש|חשבונות הבית/;
-export const NO_INSIGHT = new Set([CARD_UNDETAILED, TRANSFERS, UNCAT, PENDING]);
+export const NO_INSIGHT = new Set([CARD_UNDETAILED, TRANSFERS, UNCAT, PENDING, REFUNDS]);
 export const insightKey = (type, k) => `${type}:${normMerchant(k)}`;
 export function insights(txs, opt = {}, hidden = {}) {
   const A = analyze(txs, { ...opt, monthMode: 'txn' });

@@ -56,10 +56,15 @@ function home() {
 function insightsView() {
   const I = C.insights(S.txs, opts(), S.hiddenInsights);
   if (!I.enough) { view.innerHTML = `<div class="empty"><h2>תובנות</h2><p>צריך לפחות 3 חודשים מלאים של נתונים (יש ${I.fullMonths}).</p></div>`; return; }
-  const card = x => `<div class="li"><span><b>${esc(x.title)}</b><small>${esc(x.text)}</small></span><span>${x.saving ? `<span class="pos">חיסכון ${ils(x.amount)} בשנה</span>` : ils(x.amount)} <button class="hide" data-k="${esc(x.key)}">הסתר</button></span></div>`;
-  view.innerHTML = `<h2>תובנות</h2><p style="font-size:13px;color:var(--muted)">מחושב בטלפון בלבד, לפי חודש עסקה, על ${I.fullMonths} חודשים מלאים.</p>${I.items.map(card).join('') || '<p>אין תובנות כרגע.</p>'}
-  ${I.irregular.length ? `<h3>הוצאות לא סדירות (ממוצע)</h3>${I.irregular.map(r => `<div class="li"><span>${esc(r.key)}<small>${ils(r.yearly)} בשנה</small></span>${ils(r.monthlyAvg)} בחודש</div>`).join('')}` : ''}
-  <p><button id="copysum">העתק סיכום</button> ${Object.keys(S.hiddenInsights).length ? '<button id="unhide">הצג מוסתרות</button>' : ''}</p>`;
+  const OV = [[150, '#D9BE7E'], [300, '#E0A955'], [500, '#D97F3E'], [800, '#C0562F'], [1500, '#93352A'], [Infinity, '#5C1A20']];
+  const acc = x => x.saving ? '#3E8E6E' : x.type === 'over' ? OV.find(([t]) => x.amount < t)[1] : '#6B7A77';
+  const tag = x => x.saving ? 'חיסכון' : x.type === 'over' ? 'מעל הממוצע' : 'שינוי חודשי';
+  const card = x => `<div class="ins ${x.saving ? 'save' : x.type === 'over' ? '' : 'neu'}" style="--acc:${acc(x)}"><b class="tag">${tag(x)}</b><div class="amt"${x.type === 'mom' ? ' dir="ltr"' : ''}>${ils(x.amount)}${x.saving ? '<small>בשנה</small>' : ''}</div><p><b>${esc(x.title)}</b> · ${esc(x.text)}</p><button class="hide" data-k="${esc(x.key)}">הסתר</button></div>`;
+  const tot = I.items.filter(x => x.saving).reduce((s, x) => s + x.amount, 0);
+  view.innerHTML = `<section class="hero"><h2>תובנות</h2><small>בטלפון בלבד · לפי חודש עסקה · ${I.fullMonths} חודשים מלאים</small></section>
+  <div class="tot">חיסכון אפשרי בשנה<b>${ils(tot)}</b></div>${I.items.map(card).join('') || '<p class="sec">אין תובנות כרגע.</p>'}
+  ${I.irregular.length ? `<h3 class="sec">הוצאות לא סדירות</h3><div class="irr">${I.irregular.map(r => `<div class="li"><span>${esc(r.key)}<small>${ils(r.yearly)} בשנה</small></span><b>${ils(r.monthlyAvg)} בחודש</b></div>`).join('')}</div>` : ''}
+  <button id="copysum" class="copy">העתק סיכום</button>${Object.keys(S.hiddenInsights).length ? '<button id="unhide" class="hide">הצג מוסתרות</button>' : ''}`;
   view.querySelectorAll('.hide').forEach(b => b.onclick = async () => { S.hiddenInsights[b.dataset.k] = 1; await save(); render(); });
   const u = $('#unhide'); if (u) u.onclick = async () => { S.hiddenInsights = {}; await save(); render(); };
   $('#copysum').onclick = async () => { const A = C.analyze(S.txs, { ...opts(), monthMode: 'txn' }); const t = C.summaryText(A); try { await navigator.clipboard.writeText(t); alert('הסיכום הועתק (סכומים לפי קטגוריה וחודש בלבד)'); } catch { modal(`<pre>${esc(t)}</pre>`); } };
