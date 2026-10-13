@@ -22,7 +22,7 @@ body { margin:0; font-family: Heebo, system-ui, sans-serif; background:var(--bg)
 .sav { display:flex; gap:12px; align-items:center; } .sav .ic { flex:0 0 44px; height:44px; border-radius:50%; background:var(--amber); color:var(--ink); display:grid; place-items:center; font-weight:700; }
 .fab { position:fixed; inset-inline-end:auto; left:24px; bottom: calc(84px + env(safe-area-inset-bottom)); background:var(--amber); color:var(--ink); border:0; border-radius:28px; padding:14px 24px; font:700 17px Heebo, sans-serif; box-shadow:0 4px 12px rgba(0,0,0,.15); }
 .tabs { position:fixed; bottom:0; inset-inline:0; display:flex; background:var(--card); border-top:1px solid var(--track); padding-bottom:env(safe-area-inset-bottom); }
-.tabs button { flex:1; border:0; background:none; padding:16px 0; font:15px Heebo, sans-serif; color:var(--muted); }
+.tabs button { flex:1; border:0; background:none; padding:16px 0; font:13px Heebo, sans-serif; color:var(--muted); }
 .tabs button.on { color:var(--ink); font-weight:700; }
 .note { background:#fff6e3; border-bottom:1px solid var(--amber); padding:10px 16px; font-size:14px; }
 .warn { background:#fff6e3; border:1px solid var(--amber); border-radius:12px; padding:10px; font-size:14px; }

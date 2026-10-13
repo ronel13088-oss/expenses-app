@@ -3,7 +3,7 @@ import * as DB from './db.js';
 import { encryptBackup, decryptBackup } from './backup.js';
 import { pickImporter } from './importers.js';
 
-const S = { txs: [], rules: null, overrides: {}, merchantRules: {}, settings: { monthMode: 'charge', preferSource: true, excludeNeutral: true }, tab: 'home', month: null };
+const S = { txs: [], rules: null, overrides: {}, merchantRules: {}, hiddenInsights: {}, settings: { monthMode: 'charge', preferSource: true, excludeNeutral: true }, tab: 'home', month: null };
 const $ = s => document.querySelector(s); const view = $('#view'); const dlg = $('#dlg');
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ils = n => `<span class="num">₪ ${(n < 0 ? '-' : '') + C.fmt(Math.abs(n))}</span>`;
@@ -16,7 +16,7 @@ const SPEND = ['#D9BE7E', '#E0A955', '#D97F3E', '#C0562F', '#93352A', '#5C1A20']
 const spendColor = (rank, n) => SPEND[5 - Math.min(5, Math.floor(rank / Math.max(1, n) * 6))];
 
 async function save() { await DB.set('state', C.backupPayload(S)); }
-async function load() { const st = await DB.get('state'); if (st) Object.assign(S, st); S.rules ||= C.rulesFromDefaults(); S.merchantRules ||= {}; }
+async function load() { const st = await DB.get('state'); if (st) Object.assign(S, st); S.rules ||= C.rulesFromDefaults(); S.merchantRules ||= {}; S.hiddenInsights ||= {}; }
 const opts = () => ({ rules: S.rules, overrides: S.overrides, monthMode: S.settings.monthMode, preferSource: S.settings.preferSource, excludeNeutral: S.settings.excludeNeutral !== false, merchantRules: S.merchantRules, span: S.txs.map(t => t.date) });
 const all = () => C.analyze(S.txs, opts());
 const ofMonth = m => C.analyze(S.txs.filter(t => C.monthOf(t, S.settings.monthMode) === m), opts());
@@ -24,7 +24,7 @@ const ofMonth = m => C.analyze(S.txs.filter(t => C.monthOf(t, S.settings.monthMo
 function render() {
   document.querySelectorAll('.tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
   if (!S.txs.length && S.tab !== 'settings' && S.tab !== 'rules') { view.innerHTML = `<div class="empty"><h2>אין עדיין נתונים</h2><p>ייבוא קובץ CSV או Excel מ-RiseUp, מהבנק או מחברת האשראי. הקובץ נשאר בטלפון בלבד.</p></div>`; return; }
-  ({ home, txs: txsView, trend, rules: rulesView, settings })[S.tab]();
+  ({ home, insights: insightsView, txs: txsView, trend, rules: rulesView, settings })[S.tab]();
 }
 
 function home() {
@@ -52,6 +52,17 @@ function home() {
   $('#top10').onclick = () => modal(`<h2>10 בתי העסק המובילים · ${mName(S.month)}</h2>${M.top10.map((m, k) => `<div class="li"><span>${k + 1}. ${esc(m.key)}<small>${m.count} עסקאות</small></span>${ils(m.total)}</div>`).join('')}<h3>כל התקופה</h3>${A.top10.map((m, k) => `<div class="li"><span>${k + 1}. ${esc(m.key)}</span>${ils(m.total)}</div>`).join('')}`);
   $('#cats').onclick = () => modal(`<h2>בתי עסק · ${mName(S.month)}</h2>${M.byMerchant.map(m => `<div class="li"><span>${esc(m.key)}<small>${m.count} עסקאות</small></span>${ils(m.total)}</div>`).join('')}`);
   if (sav) $('#allsav').onclick = savingsModal;
+}
+function insightsView() {
+  const I = C.insights(S.txs, opts(), S.hiddenInsights);
+  if (!I.enough) { view.innerHTML = `<div class="empty"><h2>תובנות</h2><p>צריך לפחות 3 חודשים מלאים של נתונים (יש ${I.fullMonths}).</p></div>`; return; }
+  const card = x => `<div class="li"><span><b>${esc(x.title)}</b><small>${esc(x.text)}</small></span><span>${x.saving ? `<span class="pos">חיסכון ${ils(x.amount)} בשנה</span>` : ils(x.amount)} <button class="hide" data-k="${esc(x.key)}">הסתר</button></span></div>`;
+  view.innerHTML = `<h2>תובנות</h2><p style="font-size:13px;color:var(--muted)">מחושב בטלפון בלבד, לפי חודש עסקה, על ${I.fullMonths} חודשים מלאים.</p>${I.items.map(card).join('') || '<p>אין תובנות כרגע.</p>'}
+  ${I.irregular.length ? `<h3>הוצאות לא סדירות (ממוצע)</h3>${I.irregular.map(r => `<div class="li"><span>${esc(r.key)}<small>${ils(r.yearly)} בשנה</small></span>${ils(r.monthlyAvg)} בחודש</div>`).join('')}` : ''}
+  <p><button id="copysum">העתק סיכום</button> ${Object.keys(S.hiddenInsights).length ? '<button id="unhide">הצג מוסתרות</button>' : ''}</p>`;
+  view.querySelectorAll('.hide').forEach(b => b.onclick = async () => { S.hiddenInsights[b.dataset.k] = 1; await save(); render(); });
+  const u = $('#unhide'); if (u) u.onclick = async () => { S.hiddenInsights = {}; await save(); render(); };
+  $('#copysum').onclick = async () => { const A = C.analyze(S.txs, { ...opts(), monthMode: 'txn' }); const t = C.summaryText(A); try { await navigator.clipboard.writeText(t); alert('הסיכום הועתק (סכומים לפי קטגוריה וחודש בלבד)'); } catch { modal(`<pre>${esc(t)}</pre>`); } };
 }
 function savingsModal() {
   const A = all(); const tot = A.savings.reduce((s, x) => s + x.monthly, 0);

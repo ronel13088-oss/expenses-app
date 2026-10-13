@@ -168,7 +168,7 @@ export function deriveSourceRules(txs) {
 }
 export const mergeRules = (existing = {}, derived = {}) => { const o = { ...existing }; let added = 0; for (const [k, v] of Object.entries(derived)) if (!(k in o)) { o[k] = v; added++; } return { rules: o, added }; };
 // Everything the user decided lives here; backup/restore must round-trip all of it.
-export const BACKUP_KEYS = ['txs', 'rules', 'overrides', 'merchantRules', 'settings'];
+export const BACKUP_KEYS = ['txs', 'rules', 'overrides', 'merchantRules', 'settings', 'hiddenInsights'];
 export const backupPayload = S => Object.fromEntries(BACKUP_KEYS.map(k => [k, S[k] ?? null]));
 export const applyBackup = (S, o) => { for (const k of BACKUP_KEYS) if (o[k] != null) S[k] = o[k]; return S; };
 
@@ -314,3 +314,43 @@ export function suggestSavings(a) {
   return out;
 }
 export const fmt = n => Math.round(n).toLocaleString('en-US');
+
+// Stage 2 insights: computed on-device only. Uses transaction month, full months only (current/partial excluded).
+// "חיסכון" only for cancellable recurring charges and price increases; deviations are shown as "מעל הממוצע".
+export const IRREGULAR_RE = /דיור|שכירות|חופש|טיסות|נופש|חשבונות הבית/;
+export const NO_INSIGHT = new Set([CARD_UNDETAILED, TRANSFERS, UNCAT, PENDING]);
+export const insightKey = (type, k) => `${type}:${normMerchant(k)}`;
+export function insights(txs, opt = {}, hidden = {}) {
+  const A = analyze(txs, { ...opt, monthMode: 'txn' });
+  const full = A.byMonth.filter(m => !m.partial).map(m => m.month);
+  const out = [], push = o => { if (!hidden[o.key]) out.push(o); };
+  if (full.length < 3) return { enough: false, fullMonths: full.length, items: [], irregular: [] };
+  const exp = A.txs.filter(t => full.includes(t.month) && A.byCategory.some(c => c.key === t.category));
+  const isIrr = t => IRREGULAR_RE.test(t.category) || (t.amount > 1000 && CASH_RE.test(t.merchant));
+  const per = {}; for (const t of exp) if (!isIrr(t) && !NO_INSIGHT.has(t.category)) { (per[t.category] ||= Object.fromEntries(full.map(m => [m, 0])))[t.month] += t.amount; }
+  const last = full.at(-1), base = full.slice(0, -1);
+  for (const [cat, mm] of Object.entries(per)) {
+    const med = median(base.map(m => mm[m])), cur = mm[last];
+    if (med > 50 && cur > med * 1.2) push({ key: insightKey('over', cat), type: 'over', title: cat, text: `מעל הממוצע ב-₪${fmt(cur - med)} ב-${last}`, amount: r2(cur - med), saving: false });
+  }
+  const irr = {}; for (const t of exp) if (isIrr(t)) irr[t.category] = (irr[t.category] || 0) + t.amount;
+  const irregular = Object.entries(irr).map(([k, v]) => ({ key: k, monthlyAvg: r2(v / full.length), yearly: r2(v / full.length * 12) }));
+  const priceUp = ch => ch.length >= 3 && ch.at(-2).amount > ch[0].amount * 1.05 && ch.at(-1).amount >= ch.at(-2).amount && ch.at(-3).amount <= ch.at(-2).amount;
+  for (const r of A.recurring || []) {
+    const ch = exp.filter(t => normMerchant(t.merchant) === r.norm && t.amount > 0).sort((a, b) => a.date.localeCompare(b.date));
+    if (/מנוי|דיגיטל|סטרימינג/.test(r.category) && !priceUp(ch)) push({ key: insightKey('sub', r.norm), type: 'sub', title: r.merchant, text: `חיוב קבוע: ₪${fmt(r.monthly * 12)} בשנה`, amount: r2(r.monthly * 12), saving: true });
+    if (priceUp(ch)) { const first = ch[0].amount, c = ch.at(-1).amount; push({ key: insightKey('price', r.norm), type: 'price', title: r.merchant, text: `המחיר עלה מ-₪${fmt(first)} ל-₪${fmt(c)}`, amount: r2((c - first) * 12), saving: true }); }
+  }
+  const subs = (A.recurring || []).filter(r => /מנוי|דיגיטל|סטרימינג/.test(r.category));
+  if (subs.length >= 2) push({ key: insightKey('dup', subs.map(s => s.norm).sort().join('+')), type: 'dup', title: 'כמה מנויים דיגיטליים', text: `${subs.length} מנויים דיגיטליים קבועים. כדאי לבדוק אם יש כפילות`, amount: r2(Math.min(...subs.map(s => s.monthly)) * 12), saving: true });
+  if (full.length >= 2) { const p = full.at(-2); const d = Object.entries(per).map(([k, mm]) => ({ k, d: r2(mm[last] - mm[p]) })).filter(x => x.d).sort((a, b) => b.d - a.d);
+    for (const x of [...d.slice(0, 3).filter(x => x.d > 0), ...d.slice(-3).filter(x => x.d < 0)]) push({ key: insightKey('mom', `${x.k}@${last}`), type: 'mom', title: x.k, text: `${x.d > 0 ? 'עלייה' : 'ירידה'} של ₪${fmt(Math.abs(x.d))} לעומת ${p}`, amount: Math.abs(x.d), saving: false }); }
+  out.sort((a, b) => (b.saving - a.saving) || b.amount - a.amount);
+  return { enough: true, fullMonths: full.length, items: out, irregular };
+}
+// Text for the user to paste into an AI chat themselves: category x month totals only, no merchants or transactions.
+export function summaryText(A) {
+  const full = A.byMonth.filter(m => !m.partial).map(m => m.month), cats = A.byCategory.map(c => c.key);
+  const rows = cats.map(c => `${c}: ${full.map(m => `${m} ₪${fmt(A.txs.filter(t => t.month === m && t.category === c).reduce((s, t) => s + t.amount, 0))}`).join(', ')}`);
+  return `סיכום הוצאות לפי קטגוריה וחודש (חודשים מלאים בלבד):\n${A.byMonth.filter(m => !m.partial).map(m => `${m.month}: הוצאות ₪${fmt(m.expenses)}, הכנסות ₪${fmt(m.income)}`).join('\n')}\n\n${rows.join('\n')}`;
+}
